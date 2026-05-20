@@ -1,0 +1,7 @@
+{
+  "name": "code_execute",
+  "description": "安全执行 Python 代码片段，返回执行结果",
+  "version": "1.0.0",
+  "command": "python ./plugins/high_toolkit/code_exec/run.py",
+  "parameters": {"code":{"type":"string"}}
+}

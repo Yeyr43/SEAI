@@ -1,0 +1,68 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+.venv/
+venv/
+.env
+
+# ── Rust ──
+rust/target/
+*.pdb
+
+# ── Node / Frontend ──
+node_modules/
+web/dist/
+www_dist/
+
+# ── Data (runtime) ──
+data/sessions/
+data/logs/
+data/evo/
+data/evo_tests/
+data/errors/
+data/feedback.json
+data/feedback_detail/
+data/token_usage.json
+data/todos.json
+data/scheduled_outputs/
+data/session_contexts/
+data/context/
+data/media/
+data/workspace/
+data/seai.db
+data/workflow.db
+data/event_store.db
+data/.seai_key
+data/config.json
+data/global_knowledge.md
+data/user_profile.md
+data/memory/
+data/knowledge_graph/
+data/long_term.jsonl
+data/long_term_archive.jsonl
+
+# ── ML Models (download at runtime) ──
+src/seai/models/
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Misc ──
+*.lock
+!rust/Cargo.lock
+seai.lock

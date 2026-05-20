@@ -1,0 +1,86 @@
+version: "3.9"
+
+services:
+  seai:
+    build: .
+    container_name: seai-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SEAI_DATA=/app/data
+      - SEAI_DATABASE_URL=sqlite:////app/data/seai.db
+      - SEAI_JWT_SECRET=${SEAI_JWT_SECRET:-}
+      - SEAI_TOKEN_EXPIRE=${SEAI_TOKEN_EXPIRE:-60}
+      - SEAI_REFRESH_EXPIRE=${SEAI_REFRESH_EXPIRE:-7}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    volumes:
+      - seai_data:/app/data
+      - ./skills:/app/skills:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - seai-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: seai-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./www:/usr/share/nginx/html:ro
+    depends_on:
+      - seai
+    networks:
+      - seai-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: seai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: seai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seai_secret}
+      POSTGRES_DB: seai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - seai-network
+    profiles:
+      - production
+
+  redis:
+    image: redis:7-alpine
+    container_name: seai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - seai-network
+    profiles:
+      - production
+
+volumes:
+  seai_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  seai-network:
+    driver: bridge

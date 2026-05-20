@@ -1,0 +1,8 @@
+{
+  "name": "browser_automation",
+  "description": "浏览器自动化工具（导航、点击、截图、提取文本）",
+  "version": "1.0.0",
+  "command": "python ./plugins/high_toolkit/browser/runner.py",
+  "parameters": {"action":{"type":"string","enum":["navigate","click","screenshot","get_text"]},"url":{"type":"string"},"selector":{"type":"string"}},
+  "dependencies": ["playwright"]
+}

@@ -1,0 +1,480 @@
+/* 移动端适配样式 */
+
+@media (max-width: 768px) {
+    body {
+        font-size: 13px;
+        height: 100vh;
+        overflow: hidden;
+    }
+    
+    .app {
+        flex-direction: column;
+    }
+    
+    .topbar {
+        height: 36px;
+        padding: 0 6px;
+    }
+    
+    .topbar-left {
+        gap: 0;
+    }
+    
+    .logo {
+        height: 20px;
+    }
+    
+    .logo img {
+        height: 20px;
+    }
+    
+    .icon-btn {
+        width: 26px;
+        height: 26px;
+    }
+    
+    .icon-btn img {
+        width: 15px;
+        height: 15px;
+    }
+    
+    /* 会话面板移动端优化 */
+    .session-panel {
+        width: 100%;
+        flex: 0 0 auto;
+        height: 160px;
+        min-width: unset;
+        max-width: unset;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+    
+    .session-search {
+        margin: 0 6px 6px 6px;
+        font-size: 12px;
+        padding: 5px 8px;
+    }
+    
+    .session-list-container {
+        max-height: 80px;
+    }
+    
+    .new-session-btn {
+        width: calc(100% - 12px);
+        margin: 6px 6px 0 6px;
+        padding: 6px;
+        font-size: 12px;
+    }
+    
+    /* 聊天区域移动端优化 */
+    .chat-area {
+        margin-right: 0 !important;
+        margin-bottom: 60px;
+    }
+    
+    .messages {
+        padding: 10px 6px 110px 6px;
+    }
+    
+    .message {
+        max-width: 90% !important;
+        min-width: 120px !important;
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    .message.user,
+    .message.assistant {
+        width: 90% !important;
+        max-width: none !important;
+        padding: 12px 16px;
+    }
+    
+    .think-block {
+        width: 90% !important;
+        max-width: none !important;
+        font-size: 11px;
+    }
+    
+    /* 输入区域移动端优化 */
+    .input-area {
+        position: fixed !important;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100% !important;
+        max-width: none !important;
+        transform: none !important;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+    }
+    
+    .input-area textarea {
+        min-height: 48px;
+        padding: 12px 12px 8px 12px;
+        font-size: 16px;
+    }
+    
+    .input-actions {
+        padding: 0 12px 12px 12px;
+    }
+    
+    .toggle-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    /* 首页移动端优化 */
+    .home-screen {
+        padding-top: 8vh;
+        padding-left: 5vw;
+        padding-right: 5vw;
+    }
+    
+    .assistant-title {
+        font-size: 18px;
+        margin-bottom: 12px;
+    }
+    
+    .task-dashboard {
+        width: 95%;
+        max-height: 50vh;
+        padding: 16px;
+        margin-bottom: 4vh;
+    }
+    
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .dashboard-stats {
+        width: 100%;
+        justify-content: space-around;
+    }
+    
+    .stat-item {
+        flex: 1;
+    }
+    
+    .stat-value {
+        font-size: 16px;
+    }
+    
+    .stat-label {
+        font-size: 11px;
+    }
+    
+    .task-item {
+        padding: 10px 0;
+    }
+    
+    .task-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .task-title {
+        font-size: 14px;
+    }
+    
+    .task-status {
+        align-self: flex-end;
+    }
+    
+    .performance-monitor {
+        margin-top: 12px;
+        padding: 10px;
+    }
+    
+    .monitor-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .monitor-value {
+        font-size: 14px;
+    }
+    
+    .monitor-label {
+        font-size: 11px;
+    }
+    
+    /* 右侧面板移动端优化 */
+    .right-panel {
+        position: fixed;
+        top: 44px;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100% !important;
+        z-index: 1000;
+        background: var(--surface);
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .right-panel.mobile-open {
+        transform: translateX(0);
+        width: 100% !important;
+    }
+    
+    .panel-inner {
+        height: 100%;
+        padding: 12px;
+    }
+    
+    /* 模态框移动端优化 */
+    .modal-overlay {
+        padding: 20px;
+    }
+    
+    .modal {
+        min-width: 90%;
+        max-width: 95%;
+        max-height: 80vh;
+        padding: 20px;
+    }
+    
+    .modal-close {
+        top: 12px;
+        right: 12px;
+    }
+    
+    /* 设置页面移动端优化 */
+    .settings-layout {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .settings-nav {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 8px;
+    }
+    
+    .settings-nav button {
+        white-space: nowrap;
+        padding: 8px 12px;
+    }
+    
+    /* 技能和补丁列表移动端优化 */
+    .skill-modal-item,
+    .patch-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .skill-actions,
+    .patch-actions {
+        align-self: flex-end;
+    }
+    
+    /* 消息操作按钮移动端优化 */
+    .message-actions {
+        width: 90% !important;
+        max-width: none !important;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    
+    .message-actions button {
+        padding: 6px;
+    }
+    
+    .message-actions img {
+        width: 24px;
+        height: 24px;
+    }
+    
+    /* 待办事项移动端优化 */
+    #todoContent,
+    #todoDate,
+    #todoTime {
+        font-size: 13px;
+        padding: 8px;
+    }
+    
+    #addTodoBtn {
+        padding: 8px 12px;
+    }
+    
+    /* 滚动条优化 */
+    ::-webkit-scrollbar {
+        width: 4px;
+    }
+    
+    /* 触摸优化 */
+    button, .icon-btn, .toggle-btn {
+        -webkit-tap-highlight-color: transparent;
+        min-height: 44px; /* 最小触摸目标尺寸 */
+    }
+    
+    /* 防止文本选择 */
+    * {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+    
+    /* 允许输入框文本选择 */
+    input, textarea {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+    }
+    
+    /* 移动端特定功能 */
+    .mobile-only {
+        display: block !important;
+    }
+    
+    .desktop-only {
+        display: none !important;
+    }
+    
+    /* 底部导航栏（移动端专用） */
+    .mobile-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        z-index: 900;
+    }
+    
+    .nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 9px;
+    }
+    
+    .nav-item.active {
+        color: var(--accent);
+    }
+    
+    .nav-icon {
+        width: 23px;
+        height: 23px;
+        margin-bottom: 2px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* 超小屏幕优化 */
+    .topbar {
+        height: 40px;
+        padding: 0 8px;
+    }
+    
+    .icon-btn {
+        width: 30px;
+        height: 30px;
+    }
+    
+    .icon-btn img {
+        width: 17px;
+        height: 17px;
+    }
+    
+    .message {
+        max-width: 95% !important;
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .input-area textarea {
+        font-size: 15px;
+        min-height: 44px;
+    }
+    
+    .toggle-btn {
+        padding: 6px 10px;
+        font-size: 10px;
+    }
+    
+    .dashboard-stats {
+        gap: 8px;
+    }
+    
+    .stat-value {
+        font-size: 13px;
+    }
+    
+    .monitor-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 横屏优化 */
+@media (max-width: 768px) and (orientation: landscape) {
+    .session-panel {
+        height: 150px;
+    }
+    
+    .session-list-container {
+        max-height: 80px;
+    }
+    
+    .home-screen {
+        padding-top: 4vh;
+    }
+    
+    .task-dashboard {
+        max-height: 40vh;
+    }
+    
+    .messages {
+        padding-bottom: 100px;
+    }
+}
+
+/* 高DPI屏幕优化 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .icon-btn img,
+    .plain-btn img,
+    .toggle-btn img {
+        image-rendering: -webkit-optimize-contrast;
+    }
+}
+
+/* 暗黑模式优化 */
+@media (prefers-color-scheme: dark) {
+    body.light {
+        --bg: #1e1e2e;
+        --surface: #2a2a3c;
+        --border: #3e3e5e;
+        --text: #e0e0f0;
+        --text-secondary: #a0a0c0;
+    }
+}
+
+/* 减少动画（针对低性能设备） */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

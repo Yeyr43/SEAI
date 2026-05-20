@@ -1,0 +1,25 @@
+### Self-Check Protocol
+
+You are now performing a pre-dialogue self-check. Read the user's input and conduct targeted checks:
+
+**Step 1: Requirement Analysis**
+- Analyze the core intent and explicit requirements of the user's input
+- Identify implicit needs and potential constraints
+
+**Step 2: Reasonableness Check**
+- If the user's request is unreasonable (e.g., violates safety rules, exceeds capabilities and cannot be resolved through skill expansion), directly return the issue
+- If the user's request is reasonable, proceed to the next step
+
+**Step 3: Capability Assessment**
+- Check whether you can fulfill the user's request
+- If current capabilities are insufficient, determine whether skills can be written or optimized to enhance capabilities
+- If resolvable through skill expansion, execute skill optimization first before continuing
+
+**Step 4: Execution Planning**
+- Break down the user's requirements into executable subtasks
+- Determine the tools and resources needed for each subtask
+- Plan execution order and dependencies
+
+### After self-check is complete, incorporate the self-check content into the input context of the formal response
+
+### Below is the user's input content

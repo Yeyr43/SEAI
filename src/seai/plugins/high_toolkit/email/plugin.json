@@ -1,0 +1,7 @@
+{
+  "name": "email_send",
+  "description": "发送邮件（需配置 SMTP）",
+  "version": "1.0.0",
+  "command": "python ./plugins/high_toolkit/email/send.py",
+  "parameters": {"to":{"type":"string"},"subject":{"type":"string"},"body":{"type":"string"},"smtp_host":{"type":"string","default":"smtp.qq.com"},"smtp_port":{"type":"integer","default":587},"sender":{"type":"string"},"password":{"type":"string"}}
+}

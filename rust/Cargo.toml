@@ -1,0 +1,27 @@
+[package]
+name = "seai-rust-core"
+version = "0.1.0"
+edition = "2021"
+description = "SEAI Rust 底层引擎 — 事件总线、记忆引擎、知识图谱、沙箱、熔断器、HTTP客户端、上下文管理、文件操作、分词器、搜索客户端、命令沙箱"
+
+[lib]
+name = "_rust_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+petgraph = "0.7"
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "blocking"], default-features = false }
+walkdir = "2"
+lazy_static = "1"
+regex = "1"
+
+[dev-dependencies]
+pyo3 = { version = "0.23", features = ["auto-initialize"] }
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1

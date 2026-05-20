@@ -1,0 +1,11 @@
+{
+  "llm_endpoints": [
+    {
+      "name": "DeepSeek",
+      "api_base": "https://api.deepseek.com/",
+      "api_key": "enc:YOUR_ENCRYPTED_API_KEY",
+      "model": "deepseek-v4-flash"
+    }
+  ],
+  "current_model": "deepseek-v4-flash"
+}

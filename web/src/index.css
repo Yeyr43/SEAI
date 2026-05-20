@@ -1,0 +1,74 @@
+:root {
+  --bg: #1e1e2e;
+  --surface: #2a2a3c;
+  --border: #3e3e5e;
+  --text: #e0e0f0;
+  --text-secondary: #a0a0c0;
+  --accent: #0066FF;
+  --accent-dim: #0052cc;
+  --red: #f7768e;
+  --green: #9ece6a;
+  --yellow: #e0af68;
+  --radius: 16px;
+  --transition: 0.2s ease;
+  --icon-color: #00BBFF;
+  --icon-hover-bg: #AAAAAA;
+  --icon-filter: brightness(0) saturate(100%) invert(54%) sepia(76%) saturate(4793%) hue-rotate(184deg) brightness(103%) contrast(103%);
+  --font-family: 'Microsoft YaHei', '微软雅黑', system-ui, sans-serif;
+  font-family: var(--font-family);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+body.light {
+  --bg: #f0f0f5;
+  --surface: #ffffff;
+  --border: #d0d0e0;
+  --text: #1e1e2e;
+  --text-secondary: #5a5a7a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-family);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}

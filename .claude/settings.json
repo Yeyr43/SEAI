@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest SEAI/tests/test_tool_registry.py SEAI/tests/test_execution_pipeline.py SEAI/tests/test_llm_manager.py --tb=short)",
+      "Bash(python -m pytest SEAI/tests/ --ignore=SEAI/tests/test_model_downloader.py --ignore=SEAI/tests/test_evolution_assessment.py --ignore=SEAI/tests/test_api_e2e.py --ignore=SEAI/tests/test_agent_e2e.py --ignore=SEAI/tests/test_harness_e2e.py -q --tb=short)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest SEAI/tests/test_tool_registry.py SEAI/tests/test_execution_pipeline.py SEAI/tests/test_llm_manager.py SEAI/tests/test_llm_fallback.py SEAI/tests/test_session_manager.py --tb=short)",
+      "Bash(python -m pytest SEAI/tests/ --ignore=SEAI/tests/test_model_downloader.py --ignore=SEAI/tests/test_evolution_assessment.py --ignore=SEAI/tests/test_api_e2e.py --ignore=SEAI/tests/test_agent_e2e.py --ignore=SEAI/tests/test_harness_e2e.py --ignore=SEAI/tests/test_benchmark.py -q --tb=short)",
+      "Bash(python -m pytest SEAI/tests/test_event_bus.py SEAI/tests/test_llm_manager.py -x --tb=short)",
+      "Bash(python -m pytest SEAI/tests/test_tool_registry.py -x --tb=short -q)",
+      "Bash(python -c \"from SEAI.core.tools import grep_execute, glob_execute, edit_execute, bash_execute, todo_execute; print\\('Tools imported OK'\\); print\\(f'Tool count: 5'\\)\")",
+      "Bash(python -c \"import tree_sitter; print\\('tree-sitter OK'\\)\")",
+      "Bash(python -c \"import tree_sitter_python; print\\('tree-sitter-python OK'\\)\")",
+      "Bash(python -c \"from SEAI.core.code_graph import CodeGraphManager; from SEAI.core.tree_sitter_parser import TreeSitterParser; print\\('Phase 3 imports OK'\\)\")",
+      "Bash(python -m pytest SEAI/tests/test_memory_engine.py --tb=short -q)",
+      "Bash(python -c \"from SEAI.core.context_retriever import ContextRetriever; from SEAI.core.prompt_composer import PromptComposer; from SEAI.core.media_encoder import MediaEncoder; from SEAI.core.agent import SEAgent; print\\('All imports OK'\\)\")",
+      "Bash(python -m pytest tests/ -x --tb=short -q)",
+      "Bash(rm \"D:/SEAI/SEAI/core/tree_sitter_parser.py\" && rm -rf \"D:/SEAI/SEAI/core/__pycache__/tree_sitter_parser\"* 2>/dev/null; echo \"done\")",
+      "Bash(python -c \"from core.tree_sitter import parser, CodeBlock, TreeSitterParser, TREE_SITTER_AVAILABLE, LANGUAGE_EXTENSIONS; print\\('tree_sitter package imports OK'\\); print\\(f'TREE_SITTER_AVAILABLE={TREE_SITTER_AVAILABLE}'\\)\")",
+      "Bash(rm \"D:/SEAI/SEAI/core/tool_loop_engine.py\" && rm -rf \"D:/SEAI/SEAI/core/__pycache__/tool_loop_engine\"* 2>/dev/null; echo \"done\")",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(python -c \"import maturin; print\\('maturin', maturin.__version__\\)\")",
+      "Bash(python -c \"import setuptools; print\\('setuptools available'\\)\")",
+      "Bash(curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs)",
+      "Bash(sh -s -- -y)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")"
+    ],
+    "additionalDirectories": [
+      "D:\\SEAI\\SEAI\\core\\__pycache__"
+    ]
+  }
+}

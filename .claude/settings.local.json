@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rustup default *)",
+      "Bash(python -c \"import sys; print\\(f'Python: {sys.version}'\\); print\\(f'Platform: {sys.platform}'\\); import platform; print\\(f'Compiler: {platform.python_compiler\\(\\)}'\\)\")",
+      "Bash(rustup toolchain *)",
+      "Bash(rustup show *)",
+      "Bash(maturin build *)",
+      "Bash(PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin build --release)",
+      "Bash(python -m pip install \"rust_bindings/target/wheels/rust_bindings-0.1.0-cp314-cp314-win_amd64.whl\" --force-reinstall)",
+      "Bash(PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo check)",
+      "Bash(PYO3_PYTHON=\"C:/Python314/python.exe\" PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin build --release)",
+      "Bash(PYO3_PYTHON=\"C:/Python314/python.exe\" PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo check)",
+      "Bash(python -m pip install \"rust_bindings/target/wheels/rust_bindings-0.1.0-cp314-cp314-win_amd64.whl\" --force-reinstall -q)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

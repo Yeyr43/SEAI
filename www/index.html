@@ -1,0 +1,1989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SEAI</title>
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script src="lib/marked.min.js"></script>
+<script src="lib/d3.v7.min.js"></script>
+<script>
+"use strict";
+var QWebChannelMessageTypes={signal:1,propertyUpdate:2,init:3,idle:4,debug:5,invokeMethod:6,connectToSignal:7,disconnectFromSignal:8,setProperty:9,response:10};
+var QWebChannel=function(transport,initCallback){
+if(typeof transport!=="object"){console.error("The QWebChannel requires a transport object");return;}
+var channel=this;this.transport=transport;
+function send(data){if(typeof(data)!=="string"){data=JSON.stringify(data);}channel.transport.send(data);}
+this.transport.onmessage=function(message){var data=message.data;if(typeof data==="string"){data=JSON.parse(data);}switch(data.type){case QWebChannelMessageTypes.signal:channel.handleSignal(data);break;case QWebChannelMessageTypes.response:channel.handleResponse(data);break;case QWebChannelMessageTypes.propertyUpdate:channel.handlePropertyUpdate(data);break;default:console.error("invalid message received:",message.data);break;}};
+this.execCallbacks={};this.execId=0;
+this.exec=function(data,callback){if(!callback){callback=function(){};}if(data.id===undefined){data.id=channel.execId++;}channel.execCallbacks[data.id]=callback;send(data);};
+this.objects={};
+this.handleSignal=function(data){var object=channel.objects[data.object];if(object){object.signalEmitted(data.signal,data.args);}else{console.warn("Unhandled signal: "+data.object+"::"+data.signal);}};
+this.handleResponse=function(data){if(data.id===undefined||data.id===null){console.error("invalid response message received: ",JSON.stringify(data));return;}var callback=channel.execCallbacks[data.id];if(callback){delete channel.execCallbacks[data.id];callback(data.data);}else{console.error("no callback for response message: ",JSON.stringify(data));}};
+this.handlePropertyUpdate=function(data){for(var i=0;i<data.data.length;++i){var update=data.data[i];var object=channel.objects[update.object];if(object){object.propertyUpdate(update.signals,update.properties);}else{console.warn("Unhandled property update: "+update.object+"::"+update.signal);}}channel.exec({type:QWebChannelMessageTypes.idle});};
+this.debug=function(message){channel.exec({type:QWebChannelMessageTypes.debug,data:message});};
+channel.exec({type:QWebChannelMessageTypes.init},function(data){for(var objectName in data){new QObject(objectName,data[objectName],channel);}if(initCallback){initCallback(channel);}channel.exec({type:QWebChannelMessageTypes.idle});});
+};
+function QObject(name,data,channel){
+this.__id__=name;channel.objects[name]=this;this.__objectSignals__={};this.__propertyCache__={};var object=this;
+this.unwrapQObject=function(response){if(response instanceof Array){var ret=new Array(response.length);for(var i=0;i<response.length;++i){ret[i]=object.unwrapQObject(response[i]);}return ret;}if(!(response instanceof Object))return response;if(!response["__QObject*__"]||response.id===undefined){var jObj={};for(var propName in response){jObj[propName]=object.unwrapQObject(response[propName]);}return jObj;}var objectId=response.id;if(channel.objects[objectId])return channel.objects[objectId];if(!response.data){console.error("Cannot unwrap unknown QObject "+objectId+" without data.");return;}var qObject=new QObject(objectId,response.data,channel);return qObject;};
+this.signalEmitted=function(signalName,signalArgs){var connections=object.__objectSignals__[signalName];if(connections){connections.forEach(function(callback){callback.apply(callback,signalArgs);});}};
+this.propertyUpdate=function(signals,propertyMap){for(var propertyName in propertyMap){object.__propertyCache__[propertyName]=propertyMap[propertyName];}for(var signalName in signals){object.signalEmitted(signalName,signals[signalName]);}};
+this.connect=function(signalName,callback){if(!object.__objectSignals__[signalName]){object.__objectSignals__[signalName]=[];channel.exec({type:QWebChannelMessageTypes.connectToSignal,object:object.__id__,signal:signalName});}object.__objectSignals__[signalName].push(callback);};
+this.disconnect=function(signalName,callback){if(!object.__objectSignals__[signalName]){return;}var idx=object.__objectSignals__[signalName].indexOf(callback);if(idx===-1){return;}object.__objectSignals__[signalName].splice(idx,1);if(object.__objectSignals__[signalName].length===0){delete object.__objectSignals__[signalName];channel.exec({type:QWebChannelMessageTypes.disconnectFromSignal,object:object.__id__,signal:signalName});}};
+}
+</script>
+<style>
+:root {
+  --bg: #1e1e2e; --surface: #2a2a3c; --border: #3e3e5e; --text: #e0e0f0;
+  --text-secondary: #a0a0c0; --accent: #0066FF; --accent-dim: #0052cc;
+  --red: #f7768e; --green: #9ece6a; --yellow: #e0af68;
+  --radius: 16px; --transition: 0.2s ease;
+  --icon-color: #00BBFF;
+  --icon-hover-bg: #AAAAAA;
+  --icon-filter: brightness(0) saturate(100%) invert(54%) sepia(76%) saturate(4793%) hue-rotate(184deg) brightness(103%) contrast(103%);
+  --font-family: 'Microsoft YaHei', '微软雅黑', sans-serif;
+  font-family: var(--font-family); font-weight: 600; font-size: 15px;
+}
+body.light {
+  --bg: #f0f0f5; --surface: #ffffff; --border: #d0d0e0;
+  --text: #1e1e2e; --text-secondary: #5a5a7a;
+  --icon-color: #00BBFF;
+  --icon-filter: brightness(0) saturate(100%) invert(54%) sepia(76%) saturate(4793%) hue-rotate(184deg) brightness(103%) contrast(103%);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-family: var(--font-family); }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 8px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; position: relative; z-index: 101; user-select: none; -webkit-app-region: drag; }
+.topbar-left { display: flex; align-items: center; gap: 0; min-width: 40px; -webkit-app-region: no-drag; }
+.topbar-spacer { -webkit-app-region: drag; flex: 1; height: 44px; }
+.topbar-right { display: flex; align-items: center; gap: 4px; -webkit-app-region: no-drag; }
+
+.win-ctrl { display: flex; align-items: center; gap: 0; margin-left: 4px; }
+.win-ctrl-btn { width: 36px; height: 28px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; transition: background var(--transition); }
+.win-ctrl-btn:hover { background: var(--icon-hover-bg); }
+.win-ctrl-btn.close-btn { background: rgba(232, 17, 35, 0.12); }
+.win-ctrl-btn.close-btn:hover { background: #e81123; }
+.win-ctrl-btn img { width: 16px; height: 16px; filter: var(--icon-filter); }
+.win-ctrl-btn.close-btn img { filter: brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(2876%) hue-rotate(326deg) brightness(101%) contrast(97%); }
+.win-ctrl-btn.close-btn:hover img { filter: brightness(0) invert(1); }
+
+.icon-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+.icon-btn:hover { background: var(--icon-hover-bg); border-color: var(--icon-hover-bg); }
+.icon-btn img { width: 20px; height: 20px; }
+.icon-btn:not(.send-btn):not(.stop-btn) img { filter: var(--icon-filter); }
+.icon-btn.send-btn img { filter: brightness(0) invert(1); }
+.icon-btn.stop-btn img { filter: brightness(0) invert(1); }
+
+.plain-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; transition: background var(--transition); border-radius: 6px; }
+.plain-btn img { width: 28px; height: 28px; filter: var(--icon-filter); }
+.plain-btn:hover { background: var(--icon-hover-bg); }
+
+.app { display: flex; flex: 1; overflow: hidden; position: relative; min-width: 0; }
+.session-panel { flex: 0 0 200px; min-width: 160px; max-width: 280px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 8px 0; overflow: hidden; }
+.session-search { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; color: var(--text); font-size: 13px; margin: 0 6px 6px 6px; }
+.session-list-container { flex: 1; overflow-y: auto; padding: 0 6px; }
+.session-item { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; margin: 1px 0; background: transparent; border: 1px solid transparent; border-radius: var(--radius); font-size: 13px; transition: all var(--transition); position: relative; }
+.session-item.active { border-color: var(--accent); background: rgba(0,102,255,0.1); }
+.session-item:hover { background: #AAAAAA; color: #1e1e2e; }
+.session-item.active:hover { background: rgba(0,102,255,0.25); }
+.session-item .session-actions-wrap { display: none; }
+.session-item.active .session-actions-wrap,
+.session-item:hover .session-actions-wrap { display: block; }
+.session-info { flex: 1; overflow: hidden; }
+.session-name { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-time { font-size: 10px; color: var(--text-secondary); }
+.action-menu { display: none; position: absolute; right: 0; top: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px; z-index: 10; min-width: 100px; }
+.action-menu button { background: none; border: none; font-size: 13px; padding: 4px 8px; cursor: pointer; display: block; width: 100%; text-align: left; }
+.action-menu button:hover { background: var(--border); }
+.new-session-btn { width: calc(100% - 12px); margin: 6px 6px 0 6px; padding: 8px; border: 1px dashed var(--border); border-radius: var(--radius); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; }
+.new-session-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); overflow: hidden; position: relative; }
+
+.messages { flex: 1; overflow-y: auto; padding: 14px 10px 150px 10px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.message { max-width: 72%; min-width: 200px; padding: 12px 16px; border-radius: var(--radius); line-height: 1.6; font-size: 14px; animation: fadeIn 0.2s ease; word-break: break-word; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } }
+.message.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; margin-left: auto; margin-right: 0; width: 72%; max-width: 960px; padding: 16px 22px; }
+.message.assistant { align-self: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 22px; margin: 0 auto; width: 72%; max-width: 960px; }
+.message.system { align-self: center; background: transparent; color: var(--text-secondary); font-style: italic; font-size: 12px; }
+
+.think-block { width: 72%; max-width: 960px; margin: 4px auto; color: #888888; font-size: 12px; text-align: left; white-space: pre-wrap; word-break: break-word; line-height: 1.6; padding: 8px 0; background: transparent; }
+	.think-wrapper { width: 72%; max-width: 960px; margin: 4px auto; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: transparent; }
+	.think-wrapper .think-header { display: flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; user-select: none; font-size: 12px; color: #888; background: rgba(128,128,128,0.06); }
+	.think-wrapper .think-header:hover { background: rgba(128,128,128,0.14); }
+	.think-wrapper .think-header .toggle-arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
+	.think-wrapper.collapsed .think-header .toggle-arrow { transform: rotate(-90deg); }
+	.think-wrapper.collapsed .think-body { display: none; }
+	.think-wrapper .think-body { padding: 8px 12px; color: #888; font-size: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.6; max-height: 300px; overflow-y: auto; }
+	.think-wrapper .think-body::-webkit-scrollbar { width: 4px; }
+	.think-wrapper .think-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.message-actions { display: flex; align-items: center; gap: 10px; width: 72%; max-width: 960px; margin: 4px auto 12px auto; padding-left: 0; }
+.message-actions button { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; transition: background var(--transition); flex: 1; display: flex; align-items: center; justify-content: center; }
+.message-actions button:hover { background: var(--icon-hover-bg); }
+.message-actions img { width: 30px; height: 30px; }
+
+.msg-end-marker { width: 72%; max-width: 960px; margin: 0 auto; text-align: center; }
+.msg-end-separator { color: #666666; font-size: 12px; margin-bottom: 4px; }
+.msg-end-info { color: #666666; font-size: 12px; margin-bottom: 8px; }
+
+.message.assistant table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.message.assistant th, .message.assistant td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+.message.assistant th { background: var(--surface); color: var(--accent); font-weight: 600; }
+
+.home-screen { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; overflow: hidden; }
+.home-top { flex: 0 0 35%; display: flex; align-items: center; justify-content: center; width: 100%; }
+.home-bottom { flex: 1; display: flex; align-items: flex-start; justify-content: center; width: 100%; padding: 0 8vw; overflow-y: auto; min-height: 0; }
+.assistant-title { font-size: 20px; color: var(--text-secondary); font-weight: 400; text-align: center; }
+.task-dashboard { width: 90%; max-height: 100%; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+.task-dashboard h4 { margin-bottom: 12px; color: var(--text); display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.dash-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.dash-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; transition: opacity 0.3s ease; }
+.dash-card .card-value { font-size: 24px; font-weight: 700; color: var(--accent); transition: color 0.3s ease; }
+.dash-card .card-label { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.dash-card.warn .card-value { color: var(--yellow); }
+.dash-card.crit .card-value { color: var(--red); }
+.dash-section { margin-bottom: 10px; }
+.dash-section h5 { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border); }
+.task-item { padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+.task-item .task-goal { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-item .status { font-size: 10px; padding: 1px 5px; border-radius: 8px; font-weight: 600; }
+.status-running { background: rgba(0,102,255,0.15); color: var(--accent); }
+.status-completed { background: rgba(158,206,106,0.15); color: var(--green); }
+.status-failed { background: rgba(247,118,142,0.15); color: var(--red); }
+.status-pending { background: rgba(224,175,104,0.15); color: var(--yellow); }
+.dash-row { display: flex; gap: 10px; }
+.dash-row > * { flex: 1; }
+.progress-bar { height: 6px; background: var(--border); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.progress-bar .fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.progress-bar .fill.green { background: var(--green); }
+.progress-bar .fill.yellow { background: var(--yellow); }
+.progress-bar .fill.red { background: var(--red); }
+.progress-bar .fill.blue { background: var(--accent); }
+
+.input-area { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); width: 72%; max-width: 960px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 90; display: flex; flex-direction: column; transition: width 0.4s ease-in-out, max-width 0.4s ease-in-out; }
+.input-area:focus-within { border-color: var(--accent); }
+.input-area textarea { display: block; width: 100%; background: transparent; border: none; outline: none; color: var(--text); resize: none; font-size: 15px; line-height: 1.6; min-height: 44px; padding: 12px 12px 8px 12px; font-weight: 600; font-family: var(--font-family); transition: min-height 0.3s ease, height 0.3s ease; }
+.input-area textarea::placeholder { color: var(--text-secondary); font-weight: 600; }
+.input-actions { display: flex; align-items: center; padding: 0 12px 8px 12px; gap: 8px; }
+.input-actions-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+.input-actions-right { display: flex; align-items: center; gap: 8px; }
+
+.toggle-btn { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 13px; cursor: pointer; white-space: nowrap; transition: all var(--transition); user-select: none; font-weight: 600; font-family: var(--font-family); }
+.toggle-btn:hover { background: var(--icon-hover-bg); color: #fff; }
+.toggle-btn.active { border-color: var(--accent); color: var(--accent); background: transparent; }
+.toggle-btn img { width: 22px; height: 22px; filter: var(--icon-filter); }
+.modal .toggle-btn, .settings-content .toggle-btn { border: none; }
+.modal .toggle-btn:hover, .settings-content .toggle-btn:hover { background: var(--icon-hover-bg); }
+.modal .toggle-btn.active, .settings-content .toggle-btn.active { background: rgba(0,102,255,0.1); }
+
+.edit-actions { display: none; justify-content: center; gap: 10px; padding: 4px 0 8px 0; }
+.edit-actions .toggle-btn { display: flex; align-items: center; gap: 4px; }
+
+.right-panel { flex: 0 0 210px; min-width: 170px; max-width: 380px; overflow: hidden; z-index: 100; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.panel-inner { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding: 8px; }
+.panel-tabs { display: flex; gap: 2px; margin-bottom: 8px; }
+.panel-tab { background: none; border: none; color: var(--text-secondary); padding: 5px 8px; cursor: pointer; border-radius: 6px; font-size: 12px; font-family: var(--font-family); display: flex; align-items: center; gap: 3px; }
+.panel-tab img { width: 16px; height: 16px; }
+.panel-tab.active { background: var(--accent); color: #fff; }
+.panel-page { display: none; flex: 1; overflow-y: auto; }
+.panel-page.active { display: block; }
+.web-display { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-top: 8px; flex: 1; overflow-y: auto; white-space: pre-wrap; font-size: 13px; color: var(--text-secondary); font-family: var(--font-family); }
+.evo-list { font-size: 13px; max-height: 200px; overflow-y: auto; }
+.todo-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+#memoryGraph { width: 100%; height: 350px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+.modal-close { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; transition: background var(--transition); flex-shrink: 0; }
+.modal-close:hover { background: var(--icon-hover-bg); }
+.modal-close img { width: 24px; height: 24px; display: block; }
+.modal h3 { display: flex; align-items: center; margin-bottom: 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.skill-modal-item, .patch-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.skill-info, .patch-info { flex: 1; }
+.skill-name, .patch-name { font-weight: 600; font-size: 15px; }
+.skill-desc, .patch-desc { font-size: 13px; color: var(--text-secondary); }
+.skill-actions, .patch-actions { display: flex; align-items: center; gap: 8px; }
+.delete-btn { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; transition: background var(--transition); }
+.delete-btn:hover { background: var(--icon-hover-bg); }
+.delete-btn img { width: 24px; height: 24px; }
+.switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: .4s; border-radius: 20px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(16px); }
+
+.settings-layout { display: flex; gap: 20px; min-height: 300px; max-height: 60vh; }
+.settings-nav { width: 140px; min-width: 100px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.settings-nav button { background: none; border: none; color: var(--text); padding: 6px 10px; border-radius: var(--radius); cursor: pointer; text-align: left; font-size: 14px; font-family: var(--font-family); white-space: nowrap; }
+.settings-nav button.active { background: var(--accent); color: #000; }
+.settings-content { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; }
+.settings-page { display: none; }
+.settings-page.active { display: block; }
+.setting-row { margin-bottom: 14px; }
+.setting-row label { display: block; font-size: 14px; color: var(--text-secondary); margin-bottom: 5px; }
+.setting-row input, .setting-row select { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 14px; font-family: var(--font-family); }
+.btn-group { display: flex; gap: 4px; flex-wrap: wrap; }
+.btn-group-option { padding: 8px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 14px; cursor: pointer; font-family: var(--font-family); transition: all var(--transition); }
+.btn-group-option:hover { border-color: var(--accent); }
+.btn-group-option.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.model-list-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.model-name { font-weight: 600; }
+.select-model-btn { background: none; border: 1px solid var(--border); color: var(--text); padding: 4px 12px; border-radius: var(--radius); cursor: pointer; font-family: var(--font-family); }
+.select-model-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.endpoint-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.endpoint-info { flex: 1; }
+.whitelist-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+.whitelist-item span { font-size: 14px; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 10px 0; }
+.template-btn { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: var(--radius); cursor: pointer; font-size: 13px; transition: background var(--transition); font-family: var(--font-family); }
+.template-btn:hover { background: var(--border); }
+
+.backup-section { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-top: 12px; }
+.backup-toggle { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.backup-toggle-label { font-size: 13px; font-weight: 600; }
+.backup-field { margin-bottom: 6px; }
+.backup-field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 3px; }
+.backup-field input { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13px; outline: none; transition: border-color var(--transition); font-family: var(--font-family); }
+.backup-field input:focus { border-color: var(--accent); }
+.backup-field input:disabled { opacity: 0.4; cursor: not-allowed; background: var(--surface); }
+.backup-field .hint { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.backup-field .error { font-size: 10px; color: var(--red); margin-top: 2px; }
+.backup-field .success { font-size: 10px; color: var(--green); margin-top: 2px; }
+.backup-status { font-size: 12px; padding: 5px 8px; border-radius: var(--radius); margin-top: 6px; }
+.backup-status.success { background: rgba(158,206,106,0.1); color: var(--green); }
+.backup-status.failed { background: rgba(247,118,142,0.1); color: var(--red); }
+.backup-status.none { background: var(--bg); color: var(--text-secondary); }
+.btn-backup { width: 100%; padding: 7px; margin-top: 6px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; font-size: 11px; font-weight: 600; transition: background var(--transition); font-family: var(--font-family); }
+.btn-backup:hover { background: var(--accent-dim); }
+.btn-backup:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.upload-preview { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 8px 12px; }
+
+.rating-popup { display: none; position: fixed; z-index: 300; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); min-width: 200px; }
+.rating-popup.active { display: block; }
+.rating-popup .rating-options { display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; }
+.rating-popup .rating-option { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 12px; color: var(--text); transition: all var(--transition); font-family: var(--font-family); }
+.rating-popup .rating-option:hover { background: var(--icon-hover-bg); }
+.rating-popup .rating-option.selected { border-color: var(--accent); background: rgba(0,102,255,0.15); color: var(--accent); }
+.rating-popup .rating-current { font-size: 11px; color: var(--text-secondary); text-align: center; }
+.upload-preview-item { position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.upload-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+.upload-preview-item .remove-btn { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--red); color: #fff; border: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.upload-preview-item .file-icon { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 19px; background: var(--surface); }
+
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: var(--radius); color: #fff; font-size: 12px; z-index: 1000; animation: slideIn 0.3s ease; box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-family: var(--font-family); }
+.toast.success { background: var(--green); color: #1e1e2e; }
+.toast.error { background: var(--red); }
+.toast.info { background: var(--accent); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.panel-splitter { flex: 0 0 8px; width: 8px; min-width: 8px; background: transparent; cursor: col-resize; z-index: 102; position: relative; display: flex; align-items: center; justify-content: center; }
+.panel-splitter::before { content: ''; position: absolute; inset: 0 -4px; }
+.panel-splitter::after { content: ''; width: 4px; height: 40px; border-radius: 2px; background: var(--border); transition: background var(--transition), height var(--transition); }
+.panel-splitter:hover::after, .panel-splitter.active::after { background: var(--accent); height: 60px; }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 24px; width: 50vw; min-width: 380px; max-width: 720px; max-height: 82vh; overflow-y: auto; box-shadow: 0 8px 20px rgba(0,0,0,0.4); position: relative; margin: auto; }
+@media (max-width: 900px) { .modal { width: 85vw; min-width: unset; max-width: 95vw; } }
+@media (max-height: 600px) { .modal { max-height: 90vh; padding: 16px; } }
+</style>
+</head>
+<body>
+<header class="topbar" id="topbar">
+  <div class="topbar-left">
+    <button class="icon-btn" id="homeBtn" title="首页"><img src="ui/home.png" alt="首页"></button>
+    <button class="icon-btn" id="skillsBtn" title="技能树"><img src="ui/skills.png" alt="技能"></button>
+    <button class="icon-btn" id="patchesBtn" title="补丁"><img src="ui/patches.png" alt="补丁"></button>
+    <button class="icon-btn" id="modelSwitchBtn" title="切换模型"><img src="ui/model.png" alt="模型"></button>
+    <button class="icon-btn" id="settingsBtn" title="设置"><img src="ui/setting.png" alt="设置"></button>
+  </div>
+  <div class="topbar-spacer" id="dragSpacer"></div>
+  <div class="topbar-right">
+    <div class="win-ctrl">
+      <button class="win-ctrl-btn" id="winMinBtn" title="最小化"><img src="ui/minimize.svg" alt="─"></button>
+      <button class="win-ctrl-btn close-btn" id="winCloseBtn" title="关闭"><img src="ui/close.svg" alt="✕"></button>
+    </div>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="session-panel">
+    <input class="session-search" placeholder="搜索会话..." id="sessionSearch">
+    <div class="session-list-container"><div id="sessionList"></div></div>
+    <button class="new-session-btn" id="newSessionBtn"><img src="ui/new.png" style="width:20px;height:20px;"> 新对话</button>
+  </aside>
+
+  <div id="homeScreen" class="home-screen" style="display:flex;">
+    <div class="home-top">
+      <p class="assistant-title">你的智能助手</p>
+    </div>
+    <div class="home-bottom">
+      <div class="task-dashboard" id="taskDashboard">
+        <h4>📊 系统仪表盘</h4>
+        <div class="dash-grid" id="dashStats"></div>
+        <div class="dash-row">
+          <div class="dash-section">
+            <h5>📋 最近工作流</h5>
+            <div id="taskList"></div>
+          </div>
+          <div class="dash-section">
+            <h5>📈 系统资源</h5>
+            <div id="sysResources"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main id="chatArea" class="chat-area" style="display:none;">
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <div class="upload-preview" id="uploadPreview"></div>
+      <textarea id="userInput" placeholder="给 SEAI 发信息" rows="2"></textarea>
+      <button class="plain-btn" id="expandBtn" title="放大输入" style="position:absolute;top:8px;right:12px;"><img src="ui/magnify.png" alt="放大"></button>
+      <div class="input-actions">
+        <div class="input-actions-left">
+          <button class="toggle-btn active" id="deepThinkBtn"><img src="ui/think.png" alt="思考"> 深度思考</button>
+          <button class="toggle-btn" id="webSearchBtn"><img src="ui/net.png" alt="联网"> 联网搜索</button>
+        </div>
+        <div class="input-actions-right">
+          <input type="file" id="fileInput" accept="image/*,audio/*" multiple style="display:none">
+          <button class="plain-btn" id="attachBtn" title="上传文件" style="padding:6px 10px;"><img src="ui/upload.png" style="width:22px;height:22px;" alt="上传"></button>
+          <button class="icon-btn send-btn" id="sendBtn" style="background:var(--accent);border:none;"><img src="ui/send.png" alt="发送"></button>
+          <button class="icon-btn stop-btn" id="stopBtn" style="background:var(--red);border:none;display:none;"><img src="ui/stop.svg" alt="停止"></button>
+        </div>
+      </div>
+      <div class="edit-actions" id="editActions">
+        <button class="toggle-btn" id="modifyBtn"><img src="ui/write.png" style="width:22px;height:22px;"> 修改</button>
+        <button class="toggle-btn" id="retryBtn"><img src="ui/again.png" style="width:22px;height:22px;"> 重新发送</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="panel-splitter" id="panelSplitter"></div>
+
+  <aside class="right-panel" id="rightPanel">
+    <div class="panel-inner">
+      <div class="panel-tabs">
+        <button class="panel-tab active" data-tab="evolve"><img src="ui/evo.png" alt=""> 进化</button>
+        <button class="panel-tab" data-tab="memory"><img src="ui/map.png" alt=""> 记忆</button>
+        <button class="panel-tab" data-tab="todo"><img src="ui/clock.png" alt=""> 待办</button>
+      </div>
+      <div class="panel-page active" id="panel-evolve">
+        <h4 style="margin-top:16px;">深度自我检索</h4>
+        <button id="deepEvolveBtn" class="toggle-btn" style="margin:8px 0;">开始深度检索</button>
+        <div id="deepEvolveOutput" class="web-display" style="min-height:120px;">等待检索...</div>
+        <h4 style="margin-top:12px;">历史进化报告</h4>
+        <div class="evo-list" id="evoList"></div>
+      </div>
+      <div class="panel-page" id="panel-memory">
+        <h4>记忆地图</h4>
+        <div id="memoryGraph"></div>
+      </div>
+      <div class="panel-page" id="panel-todo">
+        <h4>待办事项</h4>
+        <div id="todoList" class="evo-list"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="modal-overlay" id="skillsModal">
+  <div class="modal">
+    <h3 style="display:flex;align-items:center;gap:0;">
+      <span id="skillsModalTitle">技能管理</span>
+      <span style="flex:1;"></span>
+      <button class="plain-btn" id="refreshSkillsBtn" title="刷新技能列表" style="flex-shrink:0;"><img src="ui/reload.png" alt="刷新"></button>
+      <button class="modal-close" id="closeSkillsModal" style="position:static;margin-left:4px;"><img src="ui/quit.png" alt="退出" style="width:28px;height:28px;"></button>
+    </h3>
+    <div id="skillListContainer"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="patchesModal">
+  <div class="modal">
+    <h3 style="display:flex;align-items:center;gap:0;">
+      <span id="patchesModalTitle">补丁管理</span>
+      <span style="flex:1;"></span>
+      <button class="plain-btn" id="refreshPatchesBtn" title="刷新补丁列表" style="flex-shrink:0;"><img src="ui/reload.png" alt="刷新"></button>
+      <button class="modal-close" id="closePatchesModal" style="position:static;margin-left:4px;"><img src="ui/quit.png" alt="退出" style="width:28px;height:28px;"></button>
+    </h3>
+    <div id="patchListContainer"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modelModal">
+  <div class="modal">
+    <h3 style="display:flex;align-items:center;gap:0;">
+      <span id="modelModalTitle">选择模型</span>
+      <span style="flex:1;"></span>
+      <button class="modal-close" id="closeModelModal" style="position:static;"><img src="ui/quit.png" alt="退出" style="width:28px;height:28px;"></button>
+    </h3>
+    <div id="modelListContainer"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;padding:0;border:none;">设置</h3>
+      <button class="modal-close" id="closeSettingsModal" style="position:static;"><img src="ui/quit.png" alt="退出"></button>
+    </div>
+    <div class="settings-layout">
+      <div class="settings-nav">
+        <button class="active" data-page="general">常规</button>
+        <button data-page="models">模型选择</button>
+        <button data-page="whitelist">白名单</button>
+        <button data-page="api">API 设置</button>
+      </div>
+      <div class="settings-content">
+        <div class="settings-page active" id="page-general">
+          <div class="setting-row"><label>语言</label><div class="btn-group" id="langSelect"><button class="btn-group-option active" data-value="zh">中文</button><button class="btn-group-option" data-value="en">English</button></div></div>
+          <div class="setting-row"><label>主题色</label><div class="btn-group" id="themeSelect"><button class="btn-group-option active" data-value="auto">跟随系统</button><button class="btn-group-option" data-value="dark">深色</button><button class="btn-group-option" data-value="light">浅色</button></div></div>
+          <div class="setting-row"><label>日志导出位置</label><input type="text" id="logExportPath" placeholder="E:/data/logs"></div>
+          <button class="toggle-btn" id="exportLogBtn"><img src="ui/upload.png" style="width:18px;height:18px;"> 导出日志</button>
+          <div class="setting-row" style="margin-top:16px;"><label>备份导出位置</label><input type="text" id="backupExportPath" placeholder="E:/data/backups/"></div>
+          <button class="toggle-btn" id="backupBtn"><img src="ui/upload.png" style="width:18px;height:18px;"> 备份数据</button>
+          <div class="backup-section" id="backupSettingsSection"></div>
+        </div>
+        <div class="settings-page" id="page-models">
+          <button class="toggle-btn" id="addEndpointBtn" style="margin-bottom:10px;">+ 添加 API</button>
+          <div id="endpointList"></div>
+          <div style="margin-top:16px;">
+            <label style="font-size:14px;color:var(--text-secondary);">快速模板</label>
+            <div class="template-grid" id="apiTemplates"></div>
+          </div>
+        </div>
+        <div class="settings-page" id="page-whitelist">
+          <h4 style="margin-bottom:10px;">写入白名单（最多8个）</h4>
+          <div class="setting-row" style="display:flex; gap:4px;">
+            <input type="text" id="newWhitelistPath" placeholder="添加目录路径，例如 D:\MyTools" style="flex:1;font-family:var(--font-family);">
+            <button class="toggle-btn" id="browseWhitelistBtn" title="打开文件管理器选择目录">📁</button>
+            <button class="toggle-btn" id="addWhitelistBtn">添加</button>
+          </div>
+          <div id="whitelistList"></div>
+        </div>
+        <div class="settings-page" id="page-api">
+          <div class="setting-row"><label>API 基地址</label><input type="text" id="apiBaseUrl" placeholder="http://127.0.0.1:8080"></div>
+          <button class="toggle-btn" id="saveApiBtn">保存 API 配置</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px; text-align:right;"><button class="toggle-btn" id="saveSettingsBtn">💾 保存</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addEndpointModal">
+  <div class="modal">
+    <h3 style="display:flex;align-items:center;gap:0;">
+      <span>添加 API 端点</span>
+      <span style="flex:1;"></span>
+      <button class="modal-close" id="closeAddEndpointModal" style="position:static;"><img src="ui/quit.png" alt="退出"></button>
+    </h3>
+    <div class="setting-row"><label>名称</label><input type="text" id="endpointName" placeholder="例如 DeepSeek"></div>
+    <div class="setting-row"><label>API Base URL</label><input type="text" id="endpointBase" placeholder="https://api.deepseek.com/v1"></div>
+    <div class="setting-row"><label>API Key</label><input type="password" id="endpointKey"></div>
+    <div class="setting-row"><label>模型名称</label><input type="text" id="endpointModel" placeholder="deepseek-chat"></div>
+    <button class="toggle-btn" id="confirmAddEndpoint" style="margin-top:10px;">确认添加</button>
+  </div>
+</div>
+
+<div id="toastContainer"></div>
+<div class="rating-popup" id="ratingPopup">
+  <div class="rating-current" id="ratingCurrentLabel"></div>
+  <div class="rating-options">
+    <button class="rating-option" data-rate="up">👍 有用</button>
+    <button class="rating-option" data-rate="down">👎 无用</button>
+  </div>
+</div>
+
+<script>
+marked.setOptions({ gfm: true, breaks: true, tables: true });
+
+(function() {
+  const homeScreen = document.getElementById('homeScreen');
+  const chatArea = document.getElementById('chatArea');
+  const messagesDiv = document.getElementById('messages');
+  const userInput = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const expandBtn = document.getElementById('expandBtn');
+  const deepThinkBtn = document.getElementById('deepThinkBtn');
+  const webSearchBtn = document.getElementById('webSearchBtn');
+  const skillsBtn = document.getElementById('skillsBtn');
+  const patchesBtn = document.getElementById('patchesBtn');
+  const modelSwitchBtn = document.getElementById('modelSwitchBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const homeBtn = document.getElementById('homeBtn');
+  const newSessionBtn = document.getElementById('newSessionBtn');
+  const sessionList = document.getElementById('sessionList');
+  const rightPanel = document.getElementById('rightPanel');
+  const panelTabs = document.querySelectorAll('.panel-tab');
+  const panelPages = document.querySelectorAll('.panel-page');
+  const deepEvolveBtn = document.getElementById('deepEvolveBtn');
+  const deepEvolveOutput = document.getElementById('deepEvolveOutput');
+  const modifyBtn = document.getElementById('modifyBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  const editActions = document.getElementById('editActions');
+  const todoList = document.getElementById('todoList');
+
+  let currentAbortController = null;
+  let currentSessionId = null;
+  let lastSessionId = null;
+  let sessionIdList = [];
+  let isDeepThinkOn = true;
+  let isWebSearchOn = false;
+  let whitelist = ['D:/SEAI', 'E:/data'];
+  let uploadedFiles = [];
+  let currentModel = '';
+
+  const closeModals = () => document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+  const toggleBtn = (b, s) => b.classList.toggle('active', s);
+
+  function applyTheme(mode) {
+    const r = document.documentElement;
+    if (mode === 'light') {
+      r.style.setProperty('--bg','#f0f0f5'); r.style.setProperty('--surface','#ffffff');
+      r.style.setProperty('--border','#d0d0e0'); r.style.setProperty('--text','#1e1e2e');
+      r.style.setProperty('--text-secondary','#5a5a7a');
+      r.style.setProperty('--icon-color','#00BBFF');
+      r.style.setProperty('--icon-filter','brightness(0) saturate(100%) invert(54%) sepia(76%) saturate(4793%) hue-rotate(184deg) brightness(103%) contrast(103%)');
+      document.body.className='light';
+    } else {
+      r.style.setProperty('--bg','#1e1e2e'); r.style.setProperty('--surface','#2a2a3c');
+      r.style.setProperty('--border','#3e3e5e'); r.style.setProperty('--text','#e0e0f0');
+      r.style.setProperty('--text-secondary','#a0a0c0');
+      r.style.setProperty('--icon-color','#00BBFF');
+      r.style.setProperty('--icon-filter','brightness(0) saturate(100%) invert(54%) sepia(76%) saturate(4793%) hue-rotate(184deg) brightness(103%) contrast(103%)');
+      document.body.className='dark';
+    }
+  }
+  function detectSys() { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  function initTheme() {
+    const saved = localStorage.getItem('theme') || 'auto';
+    if (saved === 'auto') {
+      applyTheme(detectSys());
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        if (localStorage.getItem('theme') === 'auto') applyTheme(e.matches ? 'dark' : 'light');
+      });
+    } else applyTheme(saved);
+    document.querySelectorAll('#themeSelect .btn-group-option').forEach(b => b.classList.toggle('active', b.dataset.value === saved));
+  }
+
+  const L = {
+    zh: {
+      ns:'新对话', sp:'搜索会话...', ip:'给 SEAI 发信息', think:'深度思考', ws:'联网搜索', thinkLabel:'思考过程',
+      homeTitle:'你的智能助手',
+      dashboard:'系统仪表盘', sysStatus:'系统状态', skillsLoaded:'已加载技能', curModel:'当前模型', uptime:'运行时长',
+      loading:'加载中...', recentWorkflow:'最近工作流', sysResource:'系统资源',
+      cpu:'CPU', memory:'内存', tokenToday:'今日 Token', memUsed:'内存已用', unknown:'未知',
+      sysUnavailable:'系统指标暂不可用', noWorkflow:'暂无工作流任务', connFailed:'连接失败', loadFailed:'加载失败',
+      statusRunning:'运行中', statusCompleted:'已完成', statusFailed:'失败', statusPending:'等待中', statusUnknown:'未知',
+      unknownTask:'未知任务',
+      min:'分钟', hr:'时', minShort:'分',
+      panelEvolve:'进化', panelMemory:'记忆', panelTodo:'待办',
+      deepEvolve:'深度自我检索', startEvolve:'开始深度检索', waitEvolve:'等待检索...', evoHistory:'历史进化报告',
+      noEvoHistory:'暂无历史进化报告', evoRunning:'深度检索中...', evoFailed:'检索失败：', evoDone:'检索完成',
+      memoryMap:'记忆地图', noMemory:'暂无记忆数据', memoryFailed:'加载失败',
+      todoTitle:'待办事项', todoPlaceholder:'新待办...', todoAdd:'添加',
+      skillsMgmt:'技能管理', noSkills:'暂无技能', loadSkillsFailed:'加载技能失败', skillsReloaded:'技能已重新加载', reloadFailed:'重新加载失败',
+      patchesMgmt:'补丁管理', noPatches:'暂无补丁', loadPatchesFailed:'加载补丁失败', patchesReloaded:'补丁已重新加载',
+      modelSelect:'选择模型', noModels:'暂无模型', loadModelsFailed:'加载模型失败',
+      select:'选择', switchedTo:'已切换到 ', switchFailed:'切换失败: ',
+      settingsGeneral:'常规', settingsModels:'模型选择', settingsWhitelist:'白名单', settingsApi:'API 设置',
+      langLabel:'语言', themeLabel:'主题色', themeAuto:'跟随系统', themeDark:'深色', themeLight:'浅色',
+      logExportPath:'日志导出位置', exportLog:'导出日志', backupExportPath:'备份导出位置', backupData:'备份数据',
+      addApi:'+ 添加 API', noEndpoints:'暂无 API 端点', quickTemplate:'快速模板',
+      whitelistTitle:'写入白名单（最多8个）', whitelistPlaceholder:'添加目录路径，例如 D:\\MyTools', whitelistAdd:'添加', noWhitelist:'暂无白名单',
+      apiBaseUrl:'API 基地址', saveApi:'保存 API 配置',
+      pinned:'置顶', today:'今天', yesterday:'昨天', week:'七天内', month:'三十天内', halfYear:'半年内', year:'一年内', older:'一年前',
+      rename:'重命名', delete:'删除', justNow:'刚刚', minAgo:'分前', hrAgo:'时前', dayAgo:'天前',
+      newChatDefault:'新对话', renamePrompt:'新名称:', delConfirm:'确定删除？',
+      backupEnabled:'备份功能已启用', backupDisabled:'备份功能已禁用', opFailed:'操作失败: ',
+      settingsSaved:'设置已保存', logExportSuccess:'日志导出成功', logExportFailed:'导出失败: ',
+      backupSuccess:'备份成功', backupFailed:'备份失败: ',
+      apiAdded:'API 端点已添加', apiAddFailed:'添加失败: ', apiDelFailed:'删除失败: ',
+      whitelistAdded:'已添加', whitelistAddFailed:'添加失败: ', whitelistDelFailed:'删除失败: ',
+      fillAllFields:'请填写所有字段', enterPath:'请输入路径', whitelistMax:'白名单最多8个', enterApiBase:'请输入 API 基地址',
+      apiConfigSaved:'API 配置已保存', apiConfigFailed:'保存失败: ',
+      msgSending:'消息正在发送中，请先中止或等待完成',
+      stopped:'⏹ 已停止', netError:'❌ 网络错误',
+      backupCfgFailed:'备份配置加载失败',
+      backupToggleLabel:'🔐 GitHub 备份', backupRepoLabel:'仓库路径', backupRepoPlaceholder:'https://github.com/用户名/仓库名',
+      backupRepoHintDisabled:'启用备份后可设置仓库路径', backupRepoHint:'格式: https://github.com/用户名/仓库名',
+      backupTokenLabel:'GitHub Token', backupTokenPlaceholder:'ghp_xxxxxxxxxxxx', backupTokenHint:'用于推送备份到私有仓库',
+      backupNever:'尚未执行过备份', backupLastSuccess:'✅ 上次备份: ', backupLastFailed:'❌ 上次备份失败',
+      backupRunBtn:'📤 立即备份', backupRunning:'⏳ 备份中...',
+      backupNeedPath:'请先填写有效的仓库路径，再开启备份功能', backupPathInvalid:'仓库路径无效: ', backupValidateFailed:'路径验证失败，请检查网络连接',
+      backupPathValid:'✅ 仓库路径格式有效', backupPathError:'❌ ',
+      noDesc:'无描述', noAuthor:'未知',
+      uploadedFiles:'已上传', filesCount:'个文件',
+      modify:'修改', retry:'重新输入',
+      expand:'放大', narrow:'缩小',
+      attach:'上传文件',
+      more:'更多',
+      close:'关闭',
+      refresh:'刷新',
+      send:'发送', stop:'停止',
+      home:'首页', skills:'技能', patches:'补丁', model:'模型', settings:'设置'
+    },
+    en: {
+      ns:'New Chat', sp:'Search sessions...', ip:'Message SEAI', think:'Deep Think', ws:'Web Search', thinkLabel:'Thinking',
+      homeTitle:'Your AI Assistant',
+      dashboard:'System Dashboard', sysStatus:'System Status', skillsLoaded:'Skills Loaded', curModel:'Current Model', uptime:'Uptime',
+      loading:'Loading...', recentWorkflow:'Recent Workflows', sysResource:'System Resources',
+      cpu:'CPU', memory:'Memory', tokenToday:'Tokens Today', memUsed:'Memory Used', unknown:'Unknown',
+      sysUnavailable:'System metrics unavailable', noWorkflow:'No workflow tasks', connFailed:'Connection Failed', loadFailed:'Load Failed',
+      statusRunning:'Running', statusCompleted:'Completed', statusFailed:'Failed', statusPending:'Pending', statusUnknown:'Unknown',
+      unknownTask:'Unknown Task',
+      min:'min', hr:'h', minShort:'m',
+      panelEvolve:'Evolve', panelMemory:'Memory', panelTodo:'Todo',
+      deepEvolve:'Deep Self-Evolution', startEvolve:'Start Deep Evolution', waitEvolve:'Waiting for evolution...', evoHistory:'Evolution History',
+      noEvoHistory:'No evolution history', evoRunning:'Evolving...', evoFailed:'Evolution failed: ', evoDone:'Evolution complete',
+      memoryMap:'Memory Map', noMemory:'No memory data', memoryFailed:'Load failed',
+      todoTitle:'Todo List', todoPlaceholder:'New todo...', todoAdd:'Add',
+      skillsMgmt:'Skill Management', noSkills:'No skills', loadSkillsFailed:'Failed to load skills', skillsReloaded:'Skills reloaded', reloadFailed:'Reload failed',
+      patchesMgmt:'Patch Management', noPatches:'No patches', loadPatchesFailed:'Failed to load patches', patchesReloaded:'Patches reloaded',
+      modelSelect:'Select Model', noModels:'No models', loadModelsFailed:'Failed to load models',
+      select:'Select', switchedTo:'Switched to ', switchFailed:'Switch failed: ',
+      settingsGeneral:'General', settingsModels:'Models', settingsWhitelist:'Whitelist', settingsApi:'API Settings',
+      langLabel:'Language', themeLabel:'Theme', themeAuto:'Auto', themeDark:'Dark', themeLight:'Light',
+      logExportPath:'Log Export Path', exportLog:'Export Logs', backupExportPath:'Backup Export Path', backupData:'Backup Data',
+      addApi:'+ Add API', noEndpoints:'No API endpoints', quickTemplate:'Quick Templates',
+      whitelistTitle:'Write Whitelist (max 8)', whitelistPlaceholder:'Add directory path, e.g. D:\\MyTools', whitelistAdd:'Add', noWhitelist:'No whitelist entries',
+      apiBaseUrl:'API Base URL', saveApi:'Save API Config',
+      pinned:'Pinned', today:'Today', yesterday:'Yesterday', week:'This Week', month:'This Month', halfYear:'6 Months', year:'This Year', older:'Older',
+      rename:'Rename', delete:'Delete', justNow:'Just now', minAgo:'m ago', hrAgo:'h ago', dayAgo:'d ago',
+      newChatDefault:'New Chat', renamePrompt:'New name:', delConfirm:'Confirm delete?',
+      backupEnabled:'Backup enabled', backupDisabled:'Backup disabled', opFailed:'Operation failed: ',
+      settingsSaved:'Settings saved', logExportSuccess:'Logs exported', logExportFailed:'Export failed: ',
+      backupSuccess:'Backup successful', backupFailed:'Backup failed: ',
+      apiAdded:'API endpoint added', apiAddFailed:'Add failed: ', apiDelFailed:'Delete failed: ',
+      whitelistAdded:'Added', whitelistAddFailed:'Add failed: ', whitelistDelFailed:'Delete failed: ',
+      fillAllFields:'Please fill all fields', enterPath:'Please enter a path', whitelistMax:'Whitelist max 8 entries', enterApiBase:'Please enter API base URL',
+      apiConfigSaved:'API config saved', apiConfigFailed:'Save failed: ',
+      msgSending:'Message is being sent, please wait or abort',
+      stopped:'⏹ Stopped', netError:'❌ Network Error',
+      backupCfgFailed:'Backup config load failed',
+      backupToggleLabel:'🔐 GitHub Backup', backupRepoLabel:'Repo Path', backupRepoPlaceholder:'https://github.com/user/repo',
+      backupRepoHintDisabled:'Enable backup to set repo path', backupRepoHint:'Format: https://github.com/user/repo',
+      backupTokenLabel:'GitHub Token', backupTokenPlaceholder:'ghp_xxxxxxxxxxxx', backupTokenHint:'For pushing to private repo',
+      backupNever:'No backup yet', backupLastSuccess:'✅ Last backup: ', backupLastFailed:'❌ Last backup failed',
+      backupRunBtn:'📤 Backup Now', backupRunning:'⏳ Backing up...',
+      backupNeedPath:'Please set a valid repo path before enabling backup', backupPathInvalid:'Invalid repo path: ', backupValidateFailed:'Path validation failed, check network',
+      backupPathValid:'✅ Valid repo path', backupPathError:'❌ ',
+      noDesc:'No description', noAuthor:'Unknown',
+      uploadedFiles:'Uploaded', filesCount:'files',
+      modify:'Modify', retry:'Retry',
+      expand:'Expand', narrow:'Collapse',
+      attach:'Upload File',
+      more:'More',
+      close:'Close',
+      refresh:'Refresh',
+      send:'Send', stop:'Stop',
+      home:'Home', skills:'Skills', patches:'Patches', model:'Model', settings:'Settings'
+    }
+  };
+  let lang = 'zh';
+  function setLang(l) {
+    lang = l;
+    document.querySelectorAll('#langSelect .btn-group-option').forEach(b => b.classList.toggle('active', b.dataset.value === l));
+    const t = L[l];
+    document.getElementById('newSessionBtn').innerHTML = `<img src="ui/new.png" style="width:20px;height:20px;"> ${t.ns}`;
+    document.getElementById('sessionSearch').placeholder = t.sp;
+    userInput.placeholder = t.ip;
+    deepThinkBtn.innerHTML = `<img src="ui/think.png" alt="思考"> ${t.think}`;
+    webSearchBtn.innerHTML = `<img src="ui/net.png" alt="联网"> ${t.ws}`;
+    document.querySelector('.assistant-title').textContent = t.homeTitle;
+    document.querySelector('#taskDashboard h4').textContent = '📊 ' + t.dashboard;
+    document.querySelectorAll('.panel-tab[data-tab="evolve"]')[0].childNodes[1] && (document.querySelectorAll('.panel-tab[data-tab="evolve"]')[0].childNodes[1].textContent = ' ' + t.panelEvolve);
+    document.querySelectorAll('.panel-tab[data-tab="memory"]')[0].childNodes[1] && (document.querySelectorAll('.panel-tab[data-tab="memory"]')[0].childNodes[1].textContent = ' ' + t.panelMemory);
+    document.querySelectorAll('.panel-tab[data-tab="todo"]')[0].childNodes[1] && (document.querySelectorAll('.panel-tab[data-tab="todo"]')[0].childNodes[1].textContent = ' ' + t.panelTodo);
+    const panelEvolve = document.getElementById('panel-evolve');
+    if (panelEvolve) {
+      panelEvolve.querySelector('h4:first-of-type') && (panelEvolve.querySelector('h4:first-of-type').textContent = t.deepEvolve);
+      deepEvolveBtn.textContent = t.startEvolve;
+      if (deepEvolveOutput.textContent === '等待检索...' || deepEvolveOutput.textContent === 'Waiting for evolution...') deepEvolveOutput.textContent = t.waitEvolve;
+      panelEvolve.querySelector('h4:last-of-type') && (panelEvolve.querySelector('h4:last-of-type').textContent = t.evoHistory);
+    }
+    const panelMemory = document.getElementById('panel-memory');
+    if (panelMemory) panelMemory.querySelector('h4').textContent = t.memoryMap;
+    const panelTodo = document.getElementById('panel-todo');
+    if (panelTodo) {
+      panelTodo.querySelector('h4').textContent = t.todoTitle;
+    }
+    document.getElementById('skillsModalTitle').textContent = t.skillsMgmt;
+    document.getElementById('patchesModalTitle').textContent = t.patchesMgmt;
+    document.getElementById('modelModalTitle').textContent = t.modelSelect;
+    document.querySelectorAll('.settings-nav button[data-page="general"]')[0].textContent = t.settingsGeneral;
+    document.querySelectorAll('.settings-nav button[data-page="models"]')[0].textContent = t.settingsModels;
+    document.querySelectorAll('.settings-nav button[data-page="whitelist"]')[0].textContent = t.settingsWhitelist;
+    document.querySelectorAll('.settings-nav button[data-page="api"]')[0].textContent = t.settingsApi;
+    // Update theme button labels
+    const themeBtns = document.querySelectorAll('#themeSelect .btn-group-option');
+    if (themeBtns.length >= 3) {
+      themeBtns[0].textContent = t.themeAuto;
+      themeBtns[1].textContent = t.themeDark;
+      themeBtns[2].textContent = t.themeLight;
+    }
+    const exportLogBtn = document.getElementById('exportLogBtn');
+    if (exportLogBtn) exportLogBtn.childNodes[1] && (exportLogBtn.childNodes[1].textContent = ' ' + t.exportLog);
+    const backupBtn = document.getElementById('backupBtn');
+    if (backupBtn) backupBtn.childNodes[1] && (backupBtn.childNodes[1].textContent = ' ' + t.backupData);
+    document.getElementById('addEndpointBtn') && (document.getElementById('addEndpointBtn').textContent = t.addApi);
+    document.getElementById('addWhitelistBtn') && (document.getElementById('addWhitelistBtn').textContent = t.whitelistAdd);
+    document.getElementById('saveApiBtn') && (document.getElementById('saveApiBtn').textContent = t.saveApi);
+    document.getElementById('modifyBtn') && (document.getElementById('modifyBtn').innerHTML = '<img src="ui/write.png" style="width:22px;height:22px;"> ' + t.modify);
+    document.getElementById('retryBtn') && (document.getElementById('retryBtn').innerHTML = '<img src="ui/again.png" style="width:22px;height:22px;"> ' + t.retry);
+    expandBtn.title = t.expand;
+    document.getElementById('attachBtn').title = t.attach;
+    document.getElementById('sendBtn').title = t.send;
+    document.getElementById('stopBtn').title = t.stop;
+    document.getElementById('homeBtn').title = t.home;
+    document.getElementById('skillsBtn').title = t.skills;
+    document.getElementById('patchesBtn').title = t.patches;
+    document.getElementById('modelSwitchBtn').title = t.model;
+    document.getElementById('settingsBtn').title = t.settings;
+    localStorage.setItem('lang', l);
+    loadSessions();
+    if (homeScreen.style.display !== 'none') loadTaskDashboard();
+    if (document.getElementById('panel-evolve').classList.contains('active')) loadEvoList();
+    if (document.getElementById('panel-memory').classList.contains('active')) loadMemoryGraph();
+    if (document.getElementById('settingsModal').classList.contains('active')) { loadEndpoints(); loadWhitelist(); renderBackupSettings(); }
+  }
+  function initLang() {
+    const saved = localStorage.getItem('lang');
+    if (saved && L[saved]) setLang(saved);
+  }
+
+  const pinKey = 'pinnedSessions';
+  const getPins = () => JSON.parse(localStorage.getItem(pinKey) || '[]');
+  const setPin = (id, pinned) => {
+    let pins = getPins();
+    if (pinned) { if (!pins.includes(id)) pins.push(id); }
+    else pins = pins.filter(pid => pid !== id);
+    localStorage.setItem(pinKey, JSON.stringify(pins));
+    loadSessions();
+  };
+  function timeAgo(ts) {
+    if (!ts) return '';
+    const t = L[lang];
+    const diff = Date.now() - ts * 1000;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return t.justNow;
+    if (mins < 60) return mins + t.minAgo;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + t.hrAgo;
+    return Math.floor(hours / 24) + t.dayAgo;
+  }
+  function groupSessions(sessions, pinnedIds) {
+    const groups = { pinned:[], today:[], yesterday:[], week:[], month:[], halfYear:[], year:[], older:[] };
+    const now = Date.now();
+    sessions.forEach(s => {
+      if (pinnedIds.includes(s.id)) { groups.pinned.push(s); return; }
+      const diff = now - (s.updated_at || s.created_at) * 1000;
+      const days = diff / 86400000;
+      if (days < 1) groups.today.push(s);
+      else if (days < 2) groups.yesterday.push(s);
+      else if (days < 7) groups.week.push(s);
+      else if (days < 30) groups.month.push(s);
+      else if (days < 180) groups.halfYear.push(s);
+      else if (days < 365) groups.year.push(s);
+      else groups.older.push(s);
+    });
+    return groups;
+  }
+  function renderSessions(groups) {
+    const t = L[lang];
+    sessionList.innerHTML = '';
+    const draw = (title, arr) => {
+      if (arr.length === 0) return;
+      const ti = document.createElement('div');
+      ti.style.cssText = 'font-size:14px; color:var(--text-secondary); margin:8px 0 4px;';
+      ti.textContent = title;
+      sessionList.appendChild(ti);
+      arr.forEach(s => addSessionItem(s));
+    };
+    draw(t.pinned, groups.pinned); draw(t.today, groups.today); draw(t.yesterday, groups.yesterday);
+    draw(t.week, groups.week); draw(t.month, groups.month); draw(t.halfYear, groups.halfYear);
+    draw(t.year, groups.year); draw(t.older, groups.older);
+  }
+  function addSessionItem(s) {
+    const t = L[lang];
+    const escapedId = String(s.id).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const div = document.createElement('div');
+    div.className = 'session-item' + (s.id === currentSessionId ? ' active' : '');
+    div.innerHTML = `
+      <div class="session-info"><span class="session-name">${s.name || t.newChatDefault}</span><span class="session-time">${timeAgo(s.updated_at||s.created_at)}</span></div>
+      <div class="session-actions-wrap" style="position:relative;">
+        <button class="plain-btn more-btn" style="padding:2px;"><img src="ui/conceal.png" alt="${t.more}" style="width:22px;height:22px;"></button>
+        <div class="action-menu">
+          <button class="pin-session-btn" data-id="${escapedId}"><img src="ui/top.png" style="width:18px;height:18px;vertical-align:middle;"> ${t.pinned}</button>
+          <button class="rename-btn" data-id="${escapedId}"><img src="ui/write.png" style="width:18px;height:18px;vertical-align:middle;"> ${t.rename}</button>
+          <button class="delete-session-btn" data-id="${escapedId}"><img src="ui/delete.png" style="width:18px;height:18px;vertical-align:middle;"> ${t.delete}</button>
+        </div>
+      </div>`;
+    div.querySelector('.more-btn').onclick = (e) => { e.stopPropagation(); const menu = div.querySelector('.action-menu'); menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; };
+    div.querySelector('.pin-session-btn').onclick = (e) => { e.stopPropagation(); setPin(s.id, !getPins().includes(s.id)); };
+    div.querySelector('.rename-btn').onclick = (e) => { e.stopPropagation(); const n = prompt(t.renamePrompt)?.trim(); if (n) fetch('/api/session/rename', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({session_id:s.id, name:n}) }).finally(loadSessions); };
+    div.querySelector('.delete-session-btn').onclick = (e) => { e.stopPropagation(); delSession(s.id); };
+    div.onclick = (e) => { if (e.target.closest('.more-btn') || e.target.closest('.action-menu button')) return; switchSess(s.id); };
+    sessionList.appendChild(div);
+  }
+  async function loadSessions() {
+    try {
+      const resp = await fetch('/api/sessions');
+      let list = await resp.json();
+      if (!Array.isArray(list)) list = [];
+      sessionIdList = list.map(s => s.id);
+      const groups = groupSessions(list, getPins());
+      renderSessions(groups);
+    } catch(e) { console.error(e); }
+  }
+  async function switchSess(id) {
+    if (currentAbortController) { alert(L[lang].msgSending); return; }
+    if (currentSessionId === id) return;
+    if (currentSessionId && currentSessionId !== 'new') {
+      sessionStorage.setItem('lastChatHTML_' + currentSessionId, messagesDiv.innerHTML);
+    }
+    lastSessionId = currentSessionId;
+    currentSessionId = id;
+    await fetch('/api/session/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({session_id:id}) });
+    const saved = sessionStorage.getItem('lastChatHTML_' + id);
+    if (saved) {
+      messagesDiv.innerHTML = saved;
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    } else {
+      await loadHistory(id);
+    }
+    loadSessions();
+    chatArea.style.display = 'flex';
+    homeScreen.style.display = 'none';
+  }
+  async function loadHistory(id) {
+    const resp = await fetch('/api/session/' + id + '/history');
+    const data = await resp.json();
+    messagesDiv.innerHTML = '';
+    (data.history||[]).forEach(m => addMsg(m.role, m.content));
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    if (id && id !== 'new') {
+      sessionStorage.setItem('lastChatHTML_' + id, messagesDiv.innerHTML);
+    }
+  }
+  async function newSession() {
+    if (currentSessionId && currentSessionId !== 'new') {
+      sessionStorage.setItem('lastChatHTML_' + currentSessionId, messagesDiv.innerHTML);
+    }
+    lastSessionId = currentSessionId;
+    currentSessionId = 'new';
+    messagesDiv.innerHTML = '';
+    sessionStorage.removeItem('newChatHTML');
+    chatArea.style.display = 'flex';
+    homeScreen.style.display = 'none';
+    userInput.focus();
+  }
+  async function delSession(id) {
+    if (!confirm(L[lang].delConfirm)) return;
+    await fetch('/api/session/' + id, { method:'DELETE' });
+    if (currentSessionId === id) { currentSessionId = null; messagesDiv.innerHTML = ''; }
+    if (lastSessionId === id) { lastSessionId = null; }
+    await loadSessions();
+  }
+  newSessionBtn.onclick = newSession;
+  document.getElementById('sessionSearch').oninput = function() {
+    const kw = this.value.toLowerCase();
+    document.querySelectorAll('#sessionList .session-item').forEach(el => {
+      const name = el.querySelector('.session-name')?.textContent.toLowerCase() || '';
+      el.style.display = name.includes(kw) ? '' : 'none';
+    });
+  };
+
+  homeBtn.onclick = async () => {
+    if (chatArea.style.display !== 'none') {
+      lastSessionId = currentSessionId;
+      if (currentSessionId && currentSessionId !== 'new') {
+        sessionStorage.setItem('lastChatHTML_' + currentSessionId, messagesDiv.innerHTML);
+      } else if (currentSessionId === 'new') {
+        sessionStorage.setItem('newChatHTML', messagesDiv.innerHTML);
+      }
+      currentSessionId = null;
+      chatArea.style.display = 'none';
+      homeScreen.style.display = 'flex';
+      loadSessions();
+      loadTaskDashboard();
+    } else {
+      await loadSessions();
+      if (lastSessionId && sessionIdList.includes(lastSessionId)) {
+        await switchSess(lastSessionId);
+      } else if (sessionIdList.length > 0) {
+        await switchSess(sessionIdList[0]);
+      } else {
+        newSession();
+        const saved = sessionStorage.getItem('newChatHTML');
+        if (saved) messagesDiv.innerHTML = saved;
+      }
+    }
+  };
+
+  async function loadTaskDashboard() {
+    const t = L[lang];
+    const dashStats = document.getElementById('dashStats');
+    const taskList = document.getElementById('taskList');
+    const sysResources = document.getElementById('sysResources');
+
+    try {
+      const [healthResp, metricsResp, workflowResp] = await Promise.allSettled([
+        fetch('/api/health').then(r => r.json()).catch(() => null),
+        fetch('/api/system/metrics').then(r => r.json()).catch(() => null),
+        fetch('/api/workflow/runs').then(r => r.json()).catch(() => null)
+      ]);
+      const health = healthResp.status === 'fulfilled' ? healthResp.value : null;
+      const metrics = metricsResp.status === 'fulfilled' ? metricsResp.value : null;
+      const workflow = workflowResp.status === 'fulfilled' ? workflowResp.value : null;
+
+      const uptimeMin = health && health.uptime ? Math.floor(health.uptime / 60) : 0;
+      const uptimeStr = uptimeMin < 60 ? uptimeMin + t.min : Math.floor(uptimeMin/60) + t.hr + (uptimeMin%60) + t.minShort;
+
+      const newStatsHTML = `
+        <div class="dash-card"><div class="card-value">${health ? health.status === 'ok' ? '✅' : '⚠️' : '❓'}</div><div class="card-label">${t.sysStatus}</div></div>
+        <div class="dash-card"><div class="card-value">${health ? health.skills_count || 0 : '?'}</div><div class="card-label">${t.skillsLoaded}</div></div>
+        <div class="dash-card"><div class="card-value">${health ? health.model || '?' : '?'}</div><div class="card-label">${t.curModel}</div></div>
+        <div class="dash-card"><div class="card-value">${uptimeStr}</div><div class="card-label">${t.uptime}</div></div>
+      `;
+      if (dashStats.innerHTML !== newStatsHTML) {
+        dashStats.style.opacity = '0.5';
+        dashStats.innerHTML = newStatsHTML;
+        requestAnimationFrame(() => { dashStats.style.opacity = '1'; });
+      }
+
+      if (metrics && metrics.system) {
+        const cpu = metrics.system.cpu_percent || 0;
+        const mem = metrics.system.memory_percent || 0;
+        const tokens = metrics.tokens ? metrics.tokens.total_today || 0 : 0;
+        const cpuColor = cpu > 80 ? 'red' : cpu > 60 ? 'yellow' : 'green';
+        const memColor = mem > 90 ? 'red' : mem > 70 ? 'yellow' : 'green';
+        sysResources.innerHTML = `
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;"><span>${t.cpu}</span><span>${cpu}%</span></div>
+            <div class="progress-bar"><div class="fill ${cpuColor}" style="width:${cpu}%"></div></div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;"><span>${t.memory}</span><span>${mem}%</span></div>
+            <div class="progress-bar"><div class="fill ${memColor}" style="width:${mem}%"></div></div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;"><span>${t.tokenToday}</span><span>${tokens.toLocaleString()}</span></div>
+            <div class="progress-bar"><div class="fill blue" style="width:${Math.min(tokens/1000*100, 100)}%"></div></div>
+          </div>
+          <div style="font-size:14px;color:var(--text-secondary);">
+            ${t.memUsed}: ${metrics.system.memory_used_mb ? Math.round(metrics.system.memory_used_mb) + ' MB' : t.unknown}
+          </div>
+        `;
+      } else {
+        sysResources.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">' + t.sysUnavailable + '</div>';
+      }
+
+      const runs = workflow && Array.isArray(workflow) ? workflow : (workflow && workflow.runs ? workflow.runs : []);
+      if (runs.length > 0) {
+        taskList.innerHTML = runs.slice(0, 8).map(r => {
+          const statusClass = r.status === 'running' ? 'status-running' : r.status === 'completed' ? 'status-completed' : r.status === 'failed' ? 'status-failed' : 'status-pending';
+          const statusMap = { running: t.statusRunning, completed: t.statusCompleted, failed: t.statusFailed, pending: t.statusPending };
+          const statusText = statusMap[r.status] || r.status || t.statusUnknown;
+          return `<div class="task-item"><span class="task-goal" title="${r.goal || r.task_id || ''}">${r.goal || r.task_id || t.unknownTask}</span><span class="status ${statusClass}">${statusText}</span></div>`;
+        }).join('');
+      } else {
+        taskList.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">' + t.noWorkflow + '</div>';
+      }
+    } catch(e) {
+      dashStats.innerHTML = '<div class="dash-card"><div class="card-value">❌</div><div class="card-label">' + t.connFailed + '</div></div>'.repeat(4);
+      taskList.innerHTML = '<div style="color:var(--red);padding:8px;">' + t.loadFailed + '</div>';
+      sysResources.innerHTML = '<div style="color:var(--red);padding:8px;">' + t.loadFailed + '</div>';
+    }
+  }
+
+  let dashboardRefreshTimer = null;
+  function startDashboardRefresh() {
+    stopDashboardRefresh();
+    dashboardRefreshTimer = setInterval(() => {
+      if (homeScreen.style.display !== 'none') {
+        loadTaskDashboard();
+      }
+    }, 5000);
+  }
+  function stopDashboardRefresh() {
+    if (dashboardRefreshTimer) {
+      clearInterval(dashboardRefreshTimer);
+      dashboardRefreshTimer = null;
+    }
+  }
+  startDashboardRefresh();
+
+  const addMsg = (role, content) => {
+    const div = document.createElement('div');
+    div.className = 'message ' + role;
+    const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+    div.dataset.msgId = msgId;
+    if (role === 'assistant') {
+      div.innerHTML = marked.parse(content);
+    } else div.textContent = content;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return div;
+  };
+
+  async function sendMessage(text) {
+    const query = (text || userInput.value).trim();
+    const hasFiles = uploadedFiles.length > 0;
+    if ((!query && !hasFiles) || currentAbortController) return;
+    if (currentSessionId === 'new') {
+      const resp = await fetch('/api/session/new', { method:'POST' });
+      const data = await resp.json();
+      currentSessionId = data.session_id;
+      lastSessionId = currentSessionId;
+      await loadSessions();
+    }
+    const displayContent = query || (hasFiles ? `[${L[lang].uploadedFiles} ${uploadedFiles.length} ${L[lang].filesCount}]` : '');
+    addMsg('system', new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' }));
+    addMsg('user', displayContent);
+    if (!text) userInput.value = '';
+    userInput.style.height = 'auto';
+    sendBtn.style.display = 'none'; stopBtn.style.display = 'flex'; editActions.style.display = 'none';
+    currentAbortController = new AbortController();
+    let assistantEl = null, thinkEl = null, thinkBody = null, fullResponse = '', thinkContent = '', thinkActive = false;
+
+    function createThinkWrapper() {
+      const t = L[lang];
+      const wrapper = document.createElement('div');
+      wrapper.className = 'think-wrapper';
+      const header = document.createElement('div');
+      header.className = 'think-header';
+      header.innerHTML = `<span class="toggle-arrow">▼</span><span>${t.thinkLabel || '思考过程'}</span>`;
+      header.onclick = () => {
+        wrapper.classList.toggle('collapsed');
+        const arrow = header.querySelector('.toggle-arrow');
+        arrow.textContent = wrapper.classList.contains('collapsed') ? '▶' : '▼';
+      };
+      const body = document.createElement('div');
+      body.className = 'think-body';
+      wrapper.appendChild(header);
+      wrapper.appendChild(body);
+      thinkBody = body;
+      return wrapper;
+    }
+
+    const filesToSend = [...uploadedFiles];
+    uploadedFiles = [];
+    renderUploadPreview();
+
+    try {
+      const body = { query: displayContent, stream: true, thinking_enabled: isDeepThinkOn, web_search: isWebSearchOn, session_id: currentSessionId || '' };
+      if (filesToSend.length > 0) body.files = filesToSend;
+      const resp = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), signal: currentAbortController.signal });
+      if (!resp.ok) throw new Error('Server error');
+      const reader = resp.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
+      while (true) {
+        const {done, value} = await reader.read(); if (done) break;
+        buffer += decoder.decode(value,{stream:true}); const lines = buffer.split('\n'); buffer = lines.pop()||'';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let payload = line.slice(6);
+          try { payload = JSON.parse(payload); } catch(e) {}
+          if (payload === '[DONE]') continue;
+          // State machine for parsing [THINK]...[/THINK] in streaming chunks
+          // Markers may appear: alone, at start, at end, or mid-payload
+          let remaining = payload;
+          while (remaining.length > 0) {
+            if (thinkActive) {
+              const closeIdx = remaining.indexOf('[/THINK]');
+              if (closeIdx === -1) {
+                thinkContent += remaining;
+                if (thinkBody) thinkBody.textContent = thinkContent;
+                break;
+              }
+              // Closing marker found: split at [/THINK]
+              thinkContent += remaining.slice(0, closeIdx);
+              thinkActive = false;
+              if (thinkBody) thinkBody.textContent = thinkContent;
+              remaining = remaining.slice(closeIdx + 8); // skip past [/THINK]
+              continue;
+            }
+
+            const openIdx = remaining.indexOf('[THINK]');
+            if (openIdx === -1) {
+              // No think markers: regular content
+              if (!assistantEl) { assistantEl = addMsg('assistant', remaining); fullResponse = remaining; }
+              else { fullResponse += remaining; try { assistantEl.innerHTML = marked.parse(fullResponse); } catch(e) {} }
+              break;
+            }
+
+            // Text before [THINK] goes to assistant
+            if (openIdx > 0) {
+              const before = remaining.slice(0, openIdx);
+              if (!assistantEl) { assistantEl = addMsg('assistant', before); fullResponse = before; }
+              else { fullResponse += before; try { assistantEl.innerHTML = marked.parse(fullResponse); } catch(e) {} }
+            }
+
+            // Enter think mode
+            thinkActive = true;
+            thinkContent = '';
+            if (!thinkEl) {
+              thinkEl = createThinkWrapper();
+              messagesDiv.appendChild(thinkEl);
+            }
+            remaining = remaining.slice(openIdx + 7); // skip past [THINK]
+
+            // Check if closing marker is also in this remaining text
+            const endIdx = remaining.indexOf('[/THINK]');
+            if (endIdx !== -1) {
+              thinkContent = remaining.slice(0, endIdx);
+              thinkActive = false;
+              if (thinkBody) thinkBody.textContent = thinkContent;
+              remaining = remaining.slice(endIdx + 8);
+              // continue loop to handle text after [/THINK]
+            } else {
+              thinkContent = remaining;
+              if (thinkBody) thinkBody.textContent = thinkContent;
+              break;
+            }
+          }
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+      }
+      if (currentSessionId && currentSessionId !== 'new') {
+        sessionStorage.setItem('lastChatHTML_' + currentSessionId, messagesDiv.innerHTML);
+      }
+      if (assistantEl) {
+        const now = new Date();
+        const ts = now.getFullYear() + '-' +
+          String(now.getMonth()+1).padStart(2,'0') + '-' +
+          String(now.getDate()).padStart(2,'0') + ' ' +
+          String(now.getHours()).padStart(2,'0') + ':' +
+          String(now.getMinutes()).padStart(2,'0') + ':' +
+          String(now.getSeconds()).padStart(2,'0');
+        const endMarker = document.createElement('div');
+        endMarker.className = 'msg-end-marker';
+        endMarker.innerHTML = `
+          <div class="msg-end-separator">——</div>
+          <div class="msg-end-info">SEAI · ${ts}</div>
+        `;
+        assistantEl.insertAdjacentElement('afterend', endMarker);
+
+        const msgId = assistantEl.dataset.msgId || 'msg_final';
+        const actionBar = document.createElement('div');
+        actionBar.className = 'message-actions';
+        actionBar.innerHTML = `
+          <button class="fb-btn" data-rate="up"><img src="ui/good.png" alt="赞"></button>
+          <button class="fb-btn" data-rate="down"><img src="ui/bad.png" alt="踩"></button>
+          <button class="copy-btn" title="复制回复"><img src="ui/copy.png" alt="复制"></button>`;
+        actionBar.querySelectorAll('.fb-btn').forEach(btn => {
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            showRatingPopup(btn, msgId);
+          };
+        });
+        actionBar.querySelector('.copy-btn').onclick = () => {
+          navigator.clipboard.writeText(fullResponse).then(() => toast(L[lang].copied, 'success'));
+        };
+        endMarker.insertAdjacentElement('afterend', actionBar);
+      }
+      if (currentSessionId && currentSessionId!=='new') {
+        fetch('/api/session/auto_title',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:currentSessionId})}).finally(()=>loadSessions());
+      }
+    } catch(err) {
+      if (err.name==='AbortError') addMsg('system', L[lang].stopped);
+      else addMsg('system', L[lang].netError);
+    } finally { sendBtn.style.display='flex'; stopBtn.style.display='none'; currentAbortController = null; }
+  }
+  function stopGen() { currentAbortController?.abort(); fetch('/api/stop', { method:'POST' }); editActions.style.display='flex'; }
+  sendBtn.onclick = () => sendMessage(); stopBtn.onclick = stopGen;
+  userInput.onkeydown = e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
+  userInput.oninput = () => { userInput.style.height='auto'; userInput.style.height = Math.min(userInput.scrollHeight,120)+'px'; };
+
+  modifyBtn.onclick = () => {
+    currentAbortController?.abort();
+    fetch('/api/stop', { method:'POST' });
+    currentAbortController = null;
+    const la = messagesDiv.querySelector('.message.assistant:last-of-type');
+    if (la) { userInput.value = la.textContent; la.remove(); }
+    const ta = messagesDiv.querySelector('.think-block:last-of-type, .think-wrapper:last-of-type');
+    if (ta) ta.remove();
+    const ma = messagesDiv.querySelector('.message-actions:last-of-type');
+    if (ma) ma.remove();
+    const endMarkers = messagesDiv.querySelectorAll('.msg-end-marker');
+    endMarkers.forEach(e => e.remove());
+    editActions.style.display = 'none';
+    sendBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
+    userInput.focus();
+  };
+  retryBtn.onclick = () => {
+    currentAbortController?.abort();
+    fetch('/api/stop', { method:'POST' });
+    currentAbortController = null;
+    const lu = messagesDiv.querySelector('.message.user:last-of-type');
+    if (lu) { const q = lu.textContent; lu.remove(); }
+    const la = messagesDiv.querySelector('.message.assistant:last-of-type');
+    if (la) la.remove();
+    const ta = messagesDiv.querySelector('.think-block:last-of-type, .think-wrapper:last-of-type');
+    if (ta) ta.remove();
+    const ma = messagesDiv.querySelector('.message-actions:last-of-type');
+    if (ma) ma.remove();
+    const endMarkers = messagesDiv.querySelectorAll('.msg-end-marker');
+    endMarkers.forEach(e => e.remove());
+    const sysMsg = messagesDiv.querySelector('.message.system:last-of-type');
+    if (sysMsg) sysMsg.remove();
+    editActions.style.display = 'none';
+    sendBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
+    if (lu) { userInput.value = lu.textContent; sendMessage(); }
+    else userInput.focus();
+  };
+
+  function toggleExpand() {
+    const area = document.querySelector('.input-area');
+    const textarea = area.querySelector('textarea');
+    const img = expandBtn.querySelector('img');
+    if (area.dataset.expanded==='true') {
+      area.style.width = '72%';
+      area.style.maxWidth = '960px';
+      textarea.style.minHeight = '44px';
+      textarea.style.height = 'auto';
+      area.dataset.expanded = 'false';
+      img.src = 'ui/magnify.png';
+    } else {
+      area.style.width = '100%';
+      area.style.maxWidth = '1344px';
+      textarea.style.minHeight = '132px';
+      textarea.style.height = '132px';
+      area.dataset.expanded = 'true';
+      img.src = 'ui/narrow.png';
+    }
+  }
+  expandBtn.addEventListener('click', toggleExpand);
+  deepThinkBtn.onclick = () => { isDeepThinkOn=!isDeepThinkOn; toggleBtn(deepThinkBtn, isDeepThinkOn); };
+  webSearchBtn.onclick = () => { isWebSearchOn=!isWebSearchOn; toggleBtn(webSearchBtn, isWebSearchOn); };
+
+  panelTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      panelTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      panelPages.forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'evolve') loadEvoList();
+      if (tab.dataset.tab === 'todo') loadTodos();
+      if (tab.dataset.tab === 'memory') loadMemoryGraph();
+    });
+  });
+
+  deepEvolveBtn.addEventListener('click', async () => {
+    deepEvolveOutput.textContent = L[lang].evoRunning;
+    try {
+      const resp = await fetch('/api/deep_evolve',{method:'POST'});
+      const data = await resp.json();
+      deepEvolveOutput.textContent = data.result || L[lang].evoDone;
+      await loadEvoList();
+    } catch(e) { deepEvolveOutput.textContent = L[lang].evoFailed + e.message; }
+  });
+  async function loadEvoList() {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/evo/list');
+      const items = await resp.json();
+      const evoList = document.getElementById('evoList');
+      if (items.length === 0) {
+        evoList.innerHTML = '<div style="color:var(--text-secondary);padding:8px;">' + t.noEvoHistory + '</div>';
+        return;
+      }
+      evoList.innerHTML = items.map(i => {
+        const date = new Date(i.time * 1000);
+        const dateStr = date.toLocaleDateString('zh-CN');
+        return `<div style="padding:4px 0;border-bottom:1px solid var(--border);">📄 ${i.name} <span style="font-size:12px;color:var(--text-secondary);">${dateStr}</span></div>`;
+      }).join('');
+    } catch(e) { console.error(e); }
+  }
+
+  async function loadMemoryGraph() {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/memory/graph');
+      const data = await resp.json();
+      const container = document.getElementById('memoryGraph');
+      container.innerHTML = '';
+      if (!data.nodes || data.nodes.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:20px;">' + t.noMemory + '</p>';
+        return;
+      }
+      const w = container.clientWidth, h = container.clientHeight || 350;
+      const svg = d3.select("#memoryGraph").append("svg").attr("width", w).attr("height", h);
+      const g = svg.append("g");
+      const nodes = data.nodes.map(d => ({...d}));
+      const edges = data.edges.map(d => ({...d}));
+      const sim = d3.forceSimulation(nodes).force("link", d3.forceLink(edges).id(d => d.id).distance(80))
+        .force("charge", d3.forceManyBody().strength(-200)).force("center", d3.forceCenter(w/2, h/2)).force("collide", d3.forceCollide(15));
+      const link = g.selectAll("line").data(edges).join("line").attr("stroke", "var(--border)").attr("stroke-width", d => Math.min(d.weight || 1, 3));
+      const node = g.selectAll("g").data(nodes).join("g")
+        .style("cursor", "grab")
+        .call(d3.drag()
+          .on("start", function(e,d) { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; d3.select(this).style("cursor","grabbing"); })
+          .on("drag", function(e,d) { d.fx = e.x; d.fy = e.y; })
+          .on("end", function(e,d) { if(!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; d3.select(this).style("cursor","grab"); }));
+      node.append("circle").attr("r", d => d.importance ? 3 + d.importance * 3 : 6).attr("fill", d => d.type === 'code' ? '#9ece6a' : '#0066FF').attr("stroke", "#fff").attr("stroke-width", 1);
+      node.append("text").text(d => d.text ? d.text.substring(0, 15) + (d.text.length > 15 ? '...' : '') : d.id).attr("font-size", "10px").attr("dx", 8).attr("dy", 4).attr("fill", "var(--text)");
+      sim.on("tick", () => { link.attr("x1", d=>d.source.x).attr("y1", d=>d.source.y).attr("x2", d=>d.target.x).attr("y2", d=>d.target.y); node.attr("transform", d => `translate(${d.x},${d.y})`); });
+
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 2])
+        .on("zoom", (e) => { g.attr("transform", e.transform); });
+      svg.call(zoom);
+    } catch(e) { document.getElementById('memoryGraph').innerHTML = '<p style="color:var(--red);text-align:center;padding:20px;">' + L[lang].memoryFailed + '</p>'; }
+  }
+
+  async function loadTodos() {
+    const resp = await fetch('/api/todos');
+    const todos = await resp.json();
+    todoList.innerHTML = todos.map(t => {
+      const escapedId = String(t.id).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      return `
+      <div class="todo-item">
+        <span>[${t.time}] ${t.content} ${t.done?'✅':''}</span>
+        <div>
+          <button class="plain-btn edit-todo-btn" data-id="${escapedId}"><img src="ui/write.png" style="width:20px;height:20px;"></button>
+          <button class="plain-btn delete-todo-btn" data-id="${escapedId}"><img src="ui/delete.png" style="width:20px;height:20px;"></button>
+        </div>
+      </div>`;
+    }).join('');
+    document.querySelectorAll('.delete-todo-btn').forEach(b => { b.onclick = async e => { const id = e.currentTarget.dataset.id; await fetch('/api/todos/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) }); loadTodos(); }; });
+    document.querySelectorAll('.edit-todo-btn').forEach(b => { b.onclick = e => { const id = e.currentTarget.dataset.id; const content = prompt(L[lang].editContent); const time = prompt(L[lang].editTime); if (content !== null && time !== null) fetch('/api/todos/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content, time}) }).then(loadTodos); }; });
+  }
+  skillsBtn.onclick = async () => {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/skills');
+      const data = await resp.json();
+      const skills = data.skills || [];
+      const container = document.getElementById('skillListContainer');
+      container.innerHTML = skills.map(s => `
+        <div class="skill-modal-item">
+          <div class="skill-info">
+            <div class="skill-name">${s.name || s.id}</div>
+            <div class="skill-desc">${s.description || t.noDesc} | v${s.version || '1.0'} | ${s.author || t.noAuthor}</div>
+          </div>
+        </div>
+      `).join('') || '<div style="color:var(--text-secondary);padding:12px;">' + t.noSkills + '</div>';
+      document.getElementById('skillsModal').classList.add('active');
+    } catch(e) { toast(t.loadSkillsFailed, 'error'); }
+  };
+  document.getElementById('closeSkillsModal').onclick = () => document.getElementById('skillsModal').classList.remove('active');
+  document.getElementById('refreshSkillsBtn').onclick = async () => {
+    const t = L[lang];
+    try {
+      await fetch('/api/skills/reload', { method:'POST' });
+      toast(t.skillsReloaded, 'success');
+      skillsBtn.click();
+    } catch { toast(t.reloadFailed, 'error'); }
+  };
+
+  patchesBtn.onclick = async () => {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/patches');
+      const data = await resp.json();
+      const patches = data.patches || [];
+      const container = document.getElementById('patchListContainer');
+      container.innerHTML = patches.map(p => `
+        <div class="patch-item">
+          <div class="patch-info">
+            <div class="patch-name">${p.name || p.id}</div>
+            <div class="patch-desc">${p.description || t.noDesc}</div>
+          </div>
+        </div>
+      `).join('') || '<div style="color:var(--text-secondary);padding:12px;">' + t.noPatches + '</div>';
+      document.getElementById('patchesModal').classList.add('active');
+    } catch(e) { toast(t.loadPatchesFailed, 'error'); }
+  };
+  document.getElementById('closePatchesModal').onclick = () => document.getElementById('patchesModal').classList.remove('active');
+  document.getElementById('refreshPatchesBtn').onclick = async () => {
+    const t = L[lang];
+    try {
+      await fetch('/api/patches/reload', { method:'POST' });
+      toast(t.patchesReloaded, 'success');
+      patchesBtn.click();
+    } catch { toast(t.reloadFailed, 'error'); }
+  };
+
+  modelSwitchBtn.onclick = async () => {
+    const t = L[lang];
+    try {
+      const [modelsResp, currentResp] = await Promise.all([
+        fetch('/api/models'),
+        fetch('/api/models/current')
+      ]);
+      const modelsData = await modelsResp.json();
+      const currentData = await currentResp.json();
+      const models = modelsData.models || [];
+      currentModel = currentData.current_model || '';
+      const container = document.getElementById('modelListContainer');
+      container.innerHTML = models.map(m => {
+        const escaped = m.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const isActive = m === currentModel;
+        return `
+        <div class="model-list-item">
+          <span class="model-name">${m}</span>
+          <button class="select-model-btn${isActive ? ' active' : ''}" data-model="${escaped}">${isActive ? '✓ 当前' : t.select}</button>
+        </div>`;
+      }).join('') || '<div style="color:var(--text-secondary);padding:12px;">' + t.noModels + '</div>';
+      container.querySelectorAll('.select-model-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const model = btn.dataset.model;
+          try {
+            await fetch('/api/model/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({model}) });
+            currentModel = model;
+            document.getElementById('modelModal').classList.remove('active');
+            toast(t.switchedTo + model, 'success');
+          } catch(e) { toast(t.switchFailed + e.message, 'error'); }
+        };
+      });
+      document.getElementById('modelModal').classList.add('active');
+    } catch(e) { toast(t.loadModelsFailed, 'error'); }
+  };
+  document.getElementById('closeModelModal').onclick = () => document.getElementById('modelModal').classList.remove('active');
+
+  settingsBtn.onclick = () => {
+    document.getElementById('settingsModal').classList.add('active');
+    renderBackupSettings();
+  };
+  document.getElementById('closeSettingsModal').onclick = () => document.getElementById('settingsModal').classList.remove('active');
+
+  document.querySelectorAll('.settings-nav button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-nav button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.settings-page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + btn.dataset.page).classList.add('active');
+      if (btn.dataset.page === 'models') loadEndpoints();
+      if (btn.dataset.page === 'whitelist') loadWhitelist();
+      if (btn.dataset.page === 'general') renderBackupSettings();
+    });
+  });
+
+  document.querySelectorAll('#langSelect .btn-group-option').forEach(btn => {
+    btn.onclick = function() {
+      document.querySelectorAll('#langSelect .btn-group-option').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      setLang(this.dataset.value);
+    };
+  });
+  document.querySelectorAll('#themeSelect .btn-group-option').forEach(btn => {
+    btn.onclick = function() {
+      document.querySelectorAll('#themeSelect .btn-group-option').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      const v = this.dataset.value;
+      localStorage.setItem('theme', v);
+      if (v === 'auto') applyTheme(detectSys());
+      else applyTheme(v);
+    };
+  });
+
+  document.getElementById('exportLogBtn').onclick = async () => {
+    const t = L[lang];
+    const path = document.getElementById('logExportPath').value.trim() || 'E:/data/logs';
+    try {
+      const resp = await fetch('/api/logs/export', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+      const data = await resp.json();
+      toast(data.message || t.logExportSuccess, 'success');
+    } catch(e) { toast(t.logExportFailed + e.message, 'error'); }
+  };
+
+  document.getElementById('backupBtn').onclick = async () => {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/backup', { method:'POST' });
+      const data = await resp.json();
+      if (data.path) toast(t.backupSuccess + ': ' + data.path, 'success');
+      else toast(t.backupSuccess, 'success');
+    } catch(e) { toast(t.backupFailed + e.message, 'error'); }
+  };
+
+  async function loadEndpoints() {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/endpoints');
+      const data = await resp.json();
+      const endpoints = data.endpoints || [];
+      const container = document.getElementById('endpointList');
+      container.innerHTML = endpoints.map(e => {
+        const escapedName = String(e.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `
+        <div class="endpoint-item">
+          <div class="endpoint-info">
+            <div style="font-weight:600;">${e.name || '未命名'}</div>
+            <div style="font-size:14px;color:var(--text-secondary);">${e.base_url || ''} | ${e.model || ''}</div>
+          </div>
+          <button class="delete-btn endpoint-delete-btn" data-name="${escapedName}"><img src="ui/delete.png" style="width:20px;height:20px;"></button>
+        </div>`;
+      }).join('') || '<div style="color:var(--text-secondary);padding:12px;">' + t.noEndpoints + '</div>';
+      container.querySelectorAll('.endpoint-delete-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const name = btn.dataset.name;
+          try {
+            await fetch('/api/endpoints/' + encodeURIComponent(name), { method:'DELETE' });
+            loadEndpoints();
+          } catch(e) { toast(t.apiDelFailed + e.message, 'error'); }
+        };
+      });
+    } catch(e) {}
+  }
+
+  document.getElementById('addEndpointBtn').onclick = () => document.getElementById('addEndpointModal').classList.add('active');
+  document.getElementById('closeAddEndpointModal').onclick = () => document.getElementById('addEndpointModal').classList.remove('active');
+
+  function loadApiTemplates() {
+    const templates = [
+      { name: 'DeepSeek', base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      { name: 'OpenAI', base: 'https://api.openai.com/v1', model: 'gpt-4o' },
+      { name: 'Ollama', base: 'http://localhost:11434/v1', model: 'llama3' },
+      { name: 'Groq', base: 'https://api.groq.com/openai/v1', model: 'llama-3.1-70b-versatile' },
+      { name: 'Together', base: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3-70b-chat-hf' },
+      { name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
+      { name: 'DeepSeek-Pro', base: 'https://api.deepseek.com/v1', model: 'deepseek-reasoner' },
+      { name: 'Mistral', base: 'https://api.mistral.ai/v1', model: 'mistral-large-latest' },
+    ];
+    const container = document.getElementById('apiTemplates');
+    container.innerHTML = templates.map(t => {
+      const escapedName = String(t.name).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      return `<button class="template-btn" data-name="${escapedName}" data-base="${t.base}" data-model="${t.model}">${t.name}</button>`;
+    }).join('');
+    container.querySelectorAll('.template-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.getElementById('endpointName').value = btn.dataset.name;
+        document.getElementById('endpointBase').value = btn.dataset.base;
+        document.getElementById('endpointModel').value = btn.dataset.model;
+        document.getElementById('addEndpointModal').classList.add('active');
+      };
+    });
+  }
+  loadApiTemplates();
+  document.getElementById('confirmAddEndpoint').onclick = async () => {
+    const t = L[lang];
+    const name = document.getElementById('endpointName').value.trim();
+    const base = document.getElementById('endpointBase').value.trim();
+    const key = document.getElementById('endpointKey').value.trim();
+    const model = document.getElementById('endpointModel').value.trim();
+    if (!name || !base || !key || !model) { toast(t.fillAllFields, 'error'); return; }
+    try {
+      await fetch('/api/endpoints', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, base_url:base, api_key:key, model}) });
+      toast(t.apiAdded, 'success');
+      document.getElementById('addEndpointModal').classList.remove('active');
+      loadEndpoints();
+    } catch(e) { toast(t.apiAddFailed + e.message, 'error'); }
+  };
+
+  async function loadWhitelist() {
+    const t = L[lang];
+    try {
+      const resp = await fetch('/api/whitelist');
+      const data = await resp.json();
+      whitelist = data.paths || whitelist;
+      const container = document.getElementById('whitelistList');
+      container.innerHTML = whitelist.map((p, i) => {
+        const escapedPath = String(p).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `
+        <div class="whitelist-item">
+          <span>${p}</span>
+          <button class="delete-btn whitelist-delete-btn" data-path="${escapedPath}"><img src="ui/delete.png" style="width:20px;height:20px;"></button>
+        </div>`;
+      }).join('') || '<div style="color:var(--text-secondary);padding:12px;">' + t.noWhitelist + '</div>';
+      container.querySelectorAll('.whitelist-delete-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const path = btn.dataset.path;
+          try {
+            await fetch('/api/whitelist/remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+            loadWhitelist();
+          } catch(e) { toast(t.whitelistDelFailed + e.message, 'error'); }
+        };
+      });
+    } catch(e) {}
+  }
+
+  document.getElementById('browseWhitelistBtn').onclick = async () => {
+    try {
+      if (window.seaiWindow && window.seaiWindow.pickDirectory) {
+        const dir = window.seaiWindow.pickDirectory();
+        if (dir) { document.getElementById('newWhitelistPath').value = dir; }
+      }
+    } catch(e) { toast('目录选择失败: ' + e.message, 'error'); }
+  };
+
+  document.getElementById('addWhitelistBtn').onclick = async () => {
+    const t = L[lang];
+    const path = document.getElementById('newWhitelistPath').value.trim();
+    if (!path) { toast(t.enterPath, 'error'); return; }
+    if (whitelist.length >= 8) { toast(t.whitelistMax, 'error'); return; }
+    try {
+      await fetch('/api/whitelist/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+      whitelist.push(path);
+      document.getElementById('newWhitelistPath').value = '';
+      loadWhitelist();
+      toast(t.added, 'success');
+    } catch(e) { toast(t.addFailed + e.message, 'error'); }
+  };
+
+  document.getElementById('saveApiBtn').onclick = async () => {
+    const t = L[lang];
+    const baseUrl = document.getElementById('apiBaseUrl').value.trim();
+    if (!baseUrl) { toast(t.enterApiBase, 'error'); return; }
+    try {
+      await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({api_base_url: baseUrl}) });
+      toast(t.apiConfigSaved, 'success');
+    } catch(e) { toast(t.saveFailed + e.message, 'error'); }
+  };
+
+  document.getElementById('saveSettingsBtn').onclick = () => {
+    toast(L[lang].settingsSaved, 'success');
+    document.getElementById('settingsModal').classList.remove('active');
+  };
+
+  async function renderBackupSettings() {
+    const t = L[lang];
+    const section = document.getElementById('backupSettingsSection');
+    if (!section) return;
+    try {
+      const backupCfg = await fetch('/api/backup/config').then(r => r.json());
+      const enabled = backupCfg.enabled || false;
+      const repoUrl = (backupCfg.repo_url || '').replace(/`/g, '\\`').replace(/\$/g, '\\$').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const token = (backupCfg.github_token || '').replace(/`/g, '\\`').replace(/\$/g, '\\$').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const lastBackup = backupCfg.last_backup;
+      const lastStatus = backupCfg.last_status;
+      const disabledAttr = enabled ? '' : 'disabled';
+      const statusClass = lastStatus === 'success' ? 'success' : lastStatus === 'failed' ? 'failed' : 'none';
+      const statusText = lastStatus === 'success' ? `${t.backupLastSuccess}${lastBackup}` : lastStatus === 'failed' ? t.backupLastFailed : t.backupNever;
+      section.innerHTML = `
+        <div class="backup-toggle">
+          <span class="backup-toggle-label">${t.backupToggleLabel}</span>
+          <label class="switch">
+            <input type="checkbox" id="backupEnabled" ${enabled ? 'checked' : ''} onchange="SEAI.toggleBackup(this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="backup-field">
+          <label>${t.backupRepoLabel}</label>
+          <input type="text" id="backupRepoUrl" value="${repoUrl}" placeholder="https://github.com/用户名/仓库名" ${disabledAttr} onblur="SEAI.validateRepoPath()">
+          <div class="hint" id="backupRepoHint">${disabledAttr ? t.backupRepoHintDisabled : t.backupRepoHint}</div>
+        </div>
+        <div class="backup-field">
+          <label>${t.backupTokenLabel}</label>
+          <input type="password" id="backupToken" value="${token}" placeholder="ghp_xxxxxxxxxxxx" ${disabledAttr}>
+          <div class="hint">${t.backupTokenHint}</div>
+        </div>
+        ${lastBackup ? `<div class="backup-status ${statusClass}">${statusText}</div>` : ''}
+        <button class="btn-backup" id="btnRunBackup" ${!enabled || !repoUrl ? 'disabled' : ''} onclick="SEAI.runBackup()">${t.backupRunBtn}</button>
+      `;
+    } catch(e) { section.innerHTML = '<div style="color:var(--text-secondary);padding:12px;">' + t.backupCfgFailed + '</div>'; }
+  }
+
+  async function toggleBackup(enabled) {
+    const t = L[lang];
+    if (enabled) {
+      const repoInput = document.getElementById('backupRepoUrl');
+      const repoUrl = repoInput ? repoInput.value.trim() : '';
+      if (!repoUrl) {
+        toast(t.backupNeedPath, 'error');
+        renderBackupSettings();
+        return;
+      }
+      try {
+        const validation = await fetch('/api/backup/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_url: repoUrl })
+        }).then(r => r.json());
+        if (!validation.valid) {
+          toast(t.backupPathInvalid + validation.error, 'error');
+          renderBackupSettings();
+          return;
+        }
+      } catch {
+        toast(t.backupValidateFailed, 'error');
+        renderBackupSettings();
+        return;
+      }
+    }
+    try {
+      await fetch('/api/backup/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      toast(enabled ? t.backupEnabled : t.backupDisabled, 'success');
+    } catch (e) {
+      toast(t.opFailed + e.message, 'error');
+    }
+    renderBackupSettings();
+  }
+
+  async function validateRepoPath() {
+    const t = L[lang];
+    const input = document.getElementById('backupRepoUrl');
+    const hint = document.getElementById('backupRepoHint');
+    if (!input || !hint) return;
+    const repoUrl = input.value.trim();
+    if (!repoUrl) {
+      hint.className = 'hint';
+      hint.textContent = t.backupRepoHint;
+      return;
+    }
+    try {
+      const result = await fetch('/api/backup/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo_url: repoUrl })
+      }).then(r => r.json());
+      if (result.valid) {
+        hint.className = 'success';
+        hint.textContent = t.backupPathValid;
+        input.value = result.normalized || repoUrl;
+        saveBackupField('repo_url', input.value);
+      } else {
+        hint.className = 'error';
+        hint.textContent = t.backupPathError + result.error;
+      }
+    } catch {
+      hint.className = 'error';
+      hint.textContent = t.backupValidateFailed;
+    }
+  }
+
+  async function saveBackupField(field, value) {
+    try {
+      const body = {};
+      body[field] = value;
+      await fetch('/api/backup/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch {}
+  }
+
+  async function runBackup() {
+    const t = L[lang];
+    const btn = document.getElementById('btnRunBackup');
+    if (btn) { btn.disabled = true; btn.textContent = t.backupRunning; }
+    try {
+      const result = await fetch('/api/backup/run', { method: 'POST' }).then(r => r.json());
+      toast(result.message || t.backupSuccess, 'success');
+    } catch (e) {
+      toast(t.backupFailed + e.message, 'error');
+    }
+    renderBackupSettings();
+  }
+
+  function toast(msg, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(() => { el.remove(); }, 3000);
+  }
+
+  const ratingState = {};
+  function showRatingPopup(triggerBtn, msgId) {
+    const popup = document.getElementById('ratingPopup');
+    const currentLabel = document.getElementById('ratingCurrentLabel');
+    const currentRate = ratingState[msgId];
+    if (currentRate) {
+      currentLabel.textContent = '当前评价: ' + (currentRate === 'up' ? '👍 有用' : '👎 无用') + ' | 可重新选择';
+    } else {
+      currentLabel.textContent = '请选择评价';
+    }
+    const rect = triggerBtn.getBoundingClientRect();
+    popup.style.top = (rect.bottom + 8) + 'px';
+    popup.style.left = Math.min(rect.left, window.innerWidth - 220) + 'px';
+    popup.classList.add('active');
+    popup.querySelectorAll('.rating-option').forEach(opt => {
+      opt.classList.toggle('selected', opt.dataset.rate === currentRate);
+      opt.onclick = () => {
+        const rate = opt.dataset.rate;
+        ratingState[msgId] = rate;
+        fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message_id: msgId, rate}) });
+        popup.classList.remove('active');
+        toast(rate === 'up' ? '已评价：有用 👍' : '已评价：无用 👎', 'success');
+      };
+    });
+    setTimeout(() => {
+      const closePopup = (e) => { if (!popup.contains(e.target) && e.target !== triggerBtn) { popup.classList.remove('active'); document.removeEventListener('click', closePopup); } };
+      document.addEventListener('click', closePopup);
+    }, 0);
+  }
+
+  function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    addFiles(files);
+    event.target.value = '';
+  }
+
+  function addFiles(files) {
+    for (const file of files) {
+      if (!file.type.startsWith('image/') && !file.type.startsWith('audio/')) continue;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        uploadedFiles.push({ name: file.name, type: file.type, data: e.target.result });
+        renderUploadPreview();
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function removeFile(index) {
+    uploadedFiles.splice(index, 1);
+    renderUploadPreview();
+  }
+
+  function renderUploadPreview() {
+    const container = document.getElementById('uploadPreview');
+    container.innerHTML = uploadedFiles.map((f, i) => {
+      if (f.type.startsWith('image/')) {
+        return `<div class="upload-preview-item"><img src="${f.data}" alt="${f.name}"><button class="remove-btn" onclick="SEAI.removeFile(${i})">✕</button></div>`;
+      }
+      return `<div class="upload-preview-item"><div class="file-icon">🎵</div><button class="remove-btn" onclick="SEAI.removeFile(${i})">✕</button></div>`;
+    }).join('');
+  }
+
+  document.getElementById('attachBtn').onclick = () => document.getElementById('fileInput').click();
+  document.getElementById('fileInput').onchange = handleFileSelect;
+
+  document.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        files.push(item.getAsFile());
+      }
+    }
+    if (files.length > 0) addFiles(files);
+  });
+
+  // 所有弹窗点击空白处不关闭（需使用明确的关闭按钮）
+
+  initTheme();
+  initLang();
+  loadSessions();
+
+  window.SEAI = {
+    toggleBackup, validateRepoPath, runBackup,
+    removeFile, toast
+  };
+
+  function initWindowControls() {
+    const winMinBtn = document.getElementById('winMinBtn');
+    const winCloseBtn = document.getElementById('winCloseBtn');
+    const splitter = document.getElementById('panelSplitter');
+    const rightPanel = document.getElementById('rightPanel');
+    const topbar = document.getElementById('topbar');
+
+    // 预设置回退（bridge 连接后会被覆盖）
+    if (winMinBtn) winMinBtn.onclick = function() { /* 最小化需要桥接 */ };
+    if (winCloseBtn) winCloseBtn.onclick = function() { try { window.close(); } catch(e) {} };
+
+    let _seaiBridge = null;
+
+    function setupBridge(channel) {
+      const seaiWindow = channel.objects.seaiWindow;
+      if (!seaiWindow) return;
+      _seaiBridge = seaiWindow;
+      window._seaiBridge = seaiWindow;
+
+      // 按钮回退（原生 Qt 按钮优先，这里作为备用）
+      if (winMinBtn) winMinBtn.onclick = function() { seaiWindow.minimize(); };
+      if (winCloseBtn) winCloseBtn.onclick = function() { seaiWindow.close(); };
+    }
+
+    // 顶层 mousedown 拖拽处理器 — 调用 QWindow::startSystemMove()
+    if (topbar) {
+      topbar.addEventListener('mousedown', function(e) {
+        if (e.target.closest('button') || e.target.closest('.win-ctrl')) return;
+        if (e.target.closest('.topbar-left') || e.target.closest('.topbar-right')) return;
+        const bridge = _seaiBridge || window._seaiBridge;
+        if (bridge && bridge.startSystemMove) {
+          try { bridge.startSystemMove(); } catch(_) {}
+        }
+      });
+    }
+
+    if (splitter && rightPanel) {
+      var isDragging = false;
+      var startX = 0;
+      var startWidth = 0;
+      var savedWidth = localStorage.getItem('rightPanelWidth');
+
+      if (savedWidth) {
+        var w = parseInt(savedWidth, 10);
+        if (w >= 170 && w <= 380) {
+          rightPanel.style.flex = '0 0 ' + w + 'px';
+          rightPanel.style.width = w + 'px';
+        }
+      }
+
+      function onDown(e) {
+        isDragging = true;
+        startX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+        startWidth = rightPanel.offsetWidth;
+        splitter.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      }
+
+      function onMove(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        var cx = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+        var dx = startX - cx;
+        var newWidth = startWidth + dx;
+        newWidth = Math.max(170, Math.min(380, newWidth));
+        rightPanel.style.flex = '0 0 ' + newWidth + 'px';
+        rightPanel.style.width = newWidth + 'px';
+      }
+
+      function onUp() {
+        if (!isDragging) return;
+        isDragging = false;
+        splitter.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        localStorage.setItem('rightPanelWidth', rightPanel.offsetWidth);
+      }
+
+      splitter.addEventListener('mousedown', onDown);
+      splitter.addEventListener('touchstart', onDown, {passive: false});
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('touchmove', onMove, {passive: false});
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchend', onUp);
+    }
+
+    if (typeof QWebChannel !== 'undefined') {
+      new QWebChannel(qt.webChannelTransport, setupBridge);
+    }
+  }
+
+  function tryInitWindowControls(retries) {
+    retries = retries || 0;
+    if (typeof qt !== 'undefined' && qt.webChannelTransport) {
+      initWindowControls();
+      return;
+    }
+    if (retries < 60) {
+      setTimeout(function() { tryInitWindowControls(retries + 1); }, 250);
+    }
+  }
+
+  tryInitWindowControls();
+})();
+</script>
+</body>
+</html>

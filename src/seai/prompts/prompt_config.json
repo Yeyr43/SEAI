@@ -1,0 +1,44 @@
+{
+  "version": "3.1.0",
+  "default_locale": "zh-CN",
+  "priority_order": [
+    "system_base",
+    "check",
+    "dynamic/tools",
+    "dynamic/skills",
+    "dynamic/user_profile",
+    "thinking"
+  ],
+  "role_overrides": {},
+  "max_total_tokens": 3000,
+  "budget_limits": {
+    "fixed_layer": 0.30,
+    "semi_fixed_layer": 0.20,
+    "dynamic_layer": 0.40,
+    "elastic_layer": 0.10
+  },
+  "token_budgets": {
+    "prompt_engine_max": 3000,
+    "sub_agent_budget": 3000,
+    "multi_agent_budget": 3000,
+    "context_window_max": 8000,
+    "sliding_window_budget": 2000,
+    "layer1_max_messages": 3,
+    "layer2_max_messages": 30,
+    "layer2_min_messages": 3,
+    "max_tool_rounds": 5,
+    "max_total_messages": 50
+  },
+  "model_context_limits": {
+    "default": 8192,
+    "gpt-4": 8192,
+    "gpt-4-turbo": 128000,
+    "gpt-4o": 128000,
+    "claude-3-opus": 200000,
+    "claude-3-sonnet": 200000,
+    "claude-3-haiku": 200000,
+    "deepseek-chat": 65536,
+    "qwen2.5": 131072,
+    "llama3": 8192
+  }
+}
